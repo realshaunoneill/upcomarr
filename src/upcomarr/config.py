@@ -7,10 +7,13 @@ Setting both forms of one variable is an error rather than a silent preference.
 from __future__ import annotations
 
 import dataclasses
+import re
 import urllib.parse
 from collections.abc import Mapping
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from .model import Links
 
 
 class ConfigError(Exception):
@@ -38,6 +41,7 @@ class Config:
     out_dir: Path
     metrics_port: int
     request_timeout: float
+    links: Links = dataclasses.field(default_factory=Links)
 
     def source(self, name: str) -> Source | None:
         return next((s for s in self.sources if s.name == name), None)
@@ -92,6 +96,39 @@ def _url(name: str, raw: str) -> str:
     return urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), "", ""))
 
 
+PLACEHOLDERS = ("{tmdb}", "{tvdb}", "{imdb}")
+
+
+def _template(env: Mapping[str, str], name: str) -> str | None:
+    """A details-link template such as https://request.example.com/movie/{tmdb}."""
+    raw = env.get(name, "").strip()
+    if not raw:
+        return None
+    found = re.findall(r"\{[^{}]*\}", raw)
+    if not found or any(f not in PLACEHOLDERS for f in found):
+        raise ConfigError(f"{name} needs one or more of {', '.join(PLACEHOLDERS)} and no other {{...}}")
+    parts = urllib.parse.urlsplit(raw)
+    if parts.scheme not in ("http", "https") or not parts.hostname or "{" in parts.netloc:
+        raise ConfigError(f"{name} must be an http:// or https:// URL with the placeholders after the host")
+    if parts.username or parts.password:
+        raise ConfigError(f"{name} must not contain credentials")
+    return raw
+
+
+def _links(env: Mapping[str, str]) -> Links:
+    """SEERR_URL is the shortcut (Seerr, Overseerr and Jellyseerr share /movie/<tmdb> and /tv/<tmdb>);
+    DETAILS_URL_MOVIE and DETAILS_URL_TV point anywhere else, and win if both are set."""
+    movie = tv = None
+    seerr = env.get("SEERR_URL", "").strip()
+    if seerr:
+        base = _url("SEERR_URL", seerr)
+        movie, tv = f"{base}/movie/{{tmdb}}", f"{base}/tv/{{tmdb}}"
+    movie = _template(env, "DETAILS_URL_MOVIE") or movie
+    tv = _template(env, "DETAILS_URL_TV") or tv
+    label = env.get("DETAILS_LABEL", "").strip()[:30] or "Details"
+    return Links(movie=movie, tv=tv, label=label, trailers=_bool(env, "SHOW_TRAILERS", True))
+
+
 def _tags(env: Mapping[str, str], name: str) -> tuple[str, ...]:
     raw = env.get(name, "")
     return tuple(t.strip().lower() for t in raw.split(",") if t.strip())
@@ -137,4 +174,5 @@ def load(env: Mapping[str, str]) -> Config:
         out_dir=Path(env.get("OUT_DIR", "").strip() or "/out"),
         metrics_port=_int(env, "METRICS_PORT", 0, 0, 65535),
         request_timeout=float(_int(env, "REQUEST_TIMEOUT_SECONDS", 20, 1, 300)),
+        links=_links(env),
     )

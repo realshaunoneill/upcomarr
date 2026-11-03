@@ -9,6 +9,8 @@ Rules worth knowing:
 - Movie dates are calendar days and are never shifted to a time zone.
 - A movie goes on the day it is expected on Plex: its digital release, else its physical
   one. A movie with only a cinema date in the window goes on that date, as "In cinemas".
+- A TV entry can carry one highlight ("Season finale", "New series", ...), from Sonarr's finaleType and
+  episode numbers; specials never do.
 - Things already on Plex are not "coming". They appear only in the "Just arrived" strip,
   and only if they arrived in the last DAYS_BEHIND days.
 """
@@ -30,6 +32,7 @@ from .model import (
     RELEASED,
     Entry,
     Episode,
+    Links,
     Movie,
 )
 
@@ -126,6 +129,40 @@ def _episode_title(ep: Episode) -> str | None:
     return None
 
 
+def highlight(episodes: Iterable[Episode]) -> str | None:
+    """One tag for a same-day group of a series' episodes, or None. Specials never get one."""
+    regular = [ep for ep in episodes if ep.season > 0]
+    if not regular:
+        return None
+    finales = {ep.finale for ep in regular if ep.finale}
+    premiere = next((ep for ep in sorted(regular, key=lambda e: (e.season, e.episode)) if ep.episode == 1), None)
+    if premiere and finales & {"season", "series"}:
+        return "new_series_full" if premiere.season == 1 else "full_season"
+    for kind in ("series", "season", "midseason"):
+        if kind in finales:
+            return f"{kind}_finale"
+    if premiere:
+        return "new_series" if premiere.season == 1 else "season_premiere"
+    return None
+
+
+def fill(template: str | None, tmdb: int | None = None, tvdb: int | None = None, imdb: str | None = None) -> str | None:
+    """Fill a details-link template. Any placeholder whose id is unknown drops the whole link."""
+    if template is None:
+        return None
+    out = template
+    for placeholder, value in (("{tmdb}", tmdb), ("{tvdb}", tvdb), ("{imdb}", imdb)):
+        if placeholder in out:
+            if value is None:
+                return None
+            out = out.replace(placeholder, str(value))
+    return out
+
+
+def trailer_url(video: str | None) -> str | None:
+    return f"https://www.youtube.com/watch?v={video}" if video else None
+
+
 def _tv_entries(
     episodes: Iterable[Episode],
     tz: ZoneInfo,
@@ -133,6 +170,7 @@ def _tv_entries(
     days_behind: int,
     days_ahead: int,
     posters: Mapping[str, str],
+    links: Links,
 ) -> tuple[list[Entry], list[Entry]]:
     groups: dict[tuple[int, date], list[tuple[str | None, Episode]]] = defaultdict(list)
     for ep in episodes:
@@ -177,6 +215,8 @@ def _tv_entries(
             expected_via=None,
             cinema_date=None,
             poster=posters.get(lead.poster.key) if lead.poster else None,
+            highlight=highlight(eps),
+            link=fill(links.tv, tmdb=lead.tmdb, tvdb=lead.tvdb, imdb=lead.imdb),
         )
         (recent if day < today else upcoming).append(entry)
     return upcoming, recent
@@ -208,6 +248,7 @@ def _movie_entries(
     days_behind: int,
     days_ahead: int,
     posters: Mapping[str, str],
+    links: Links,
 ) -> tuple[list[Entry], list[Entry]]:
     upcoming: list[Entry] = []
     recent: list[Entry] = []
@@ -225,6 +266,8 @@ def _movie_entries(
             "time": None,
             "cinema_date": movie.cinema.isoformat() if movie.cinema else None,
             "poster": poster,
+            "trailer": trailer_url(movie.trailer) if links.trailers else None,
+            "link": fill(links.movie, tmdb=movie.tmdb, imdb=movie.imdb),
         }
         if movie.has_file:
             added = movie.file_added
@@ -272,10 +315,12 @@ def build(
     tv_days_ahead: int,
     movie_days_ahead: int,
     posters: Mapping[str, str],
+    links: Links | None = None,
 ) -> Schedule:
+    links = links or Links()
     today = now.astimezone(tz).date()
-    tv_up, tv_recent = _tv_entries(episodes, tz, today, days_behind, tv_days_ahead, posters)
-    mv_up, mv_recent = _movie_entries(movies, today, days_behind, movie_days_ahead, posters)
+    tv_up, tv_recent = _tv_entries(episodes, tz, today, days_behind, tv_days_ahead, posters, links)
+    mv_up, mv_recent = _movie_entries(movies, today, days_behind, movie_days_ahead, posters, links)
 
     by_day: dict[date, list[Entry]] = defaultdict(list)
     for entry in tv_up + mv_up:

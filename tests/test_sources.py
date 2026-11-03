@@ -55,6 +55,16 @@ class SonarrTest(unittest.TestCase):
             self.assertIn("includeSeries=true", query)
             self.assertIn("unmonitored=false", query)
 
+    def test_ids_and_finale_are_validated(self):
+        show = fixtures.series(1, "Show", tmdb=1399)
+        show["imdbId"] = "tt0944947"
+        ep = sonarr.project(fixtures.episode(show, 8, 6, "2026-11-03T21:00:00Z", finale="series"), False, None)
+        self.assertEqual((ep.tmdb, ep.tvdb, ep.imdb, ep.finale), (1399, 5550001, "tt0944947", "series"))
+        bad = fixtures.series(1, "Show", tmdb=-5)
+        bad["imdbId"] = "javascript:1"
+        ep = sonarr.project(fixtures.episode(bad, 1, 1, "2026-11-03T21:00:00Z", finale="cliffhanger"), False, None)
+        self.assertEqual((ep.tmdb, ep.imdb, ep.finale), (None, None, None))
+
 
 class RadarrTest(unittest.TestCase):
     def test_dates_are_days(self):
@@ -72,6 +82,13 @@ class RadarrTest(unittest.TestCase):
         self.assertIn("/data/movies/CANARY-file-7.mkv", found)
         self.assertIn("CANARY-relative-7.mkv", found)
         self.assertIn("/data/movies/CANARY-folder-7", found)
+
+    def test_trailer_is_validated(self):
+        good = radarr.project(fixtures.movie(1, "Film", trailer="vKQi3bBA1y8"), False, None)
+        self.assertEqual((good.trailer, good.tmdb), ("vKQi3bBA1y8", 4440001))
+        for bad in ('"><script>', "abc", "a" * 40, "x/../y"):
+            with self.subTest(bad=bad):
+                self.assertIsNone(radarr.project(fixtures.movie(1, "Film", trailer=bad), False, None).trailer)
 
     def test_unmonitored(self):
         self.assertIsNone(radarr.project(fixtures.movie(1, "Film", monitored=False), False, None))

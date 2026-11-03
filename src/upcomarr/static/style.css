@@ -76,8 +76,9 @@ section h2 time { color: var(--muted); font-weight: 400; }
 .card-title { margin: 0; font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
 .card-meta, .card-note { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .card-episode { margin: 0; font-style: italic; font-size: 0.92rem; overflow-wrap: anywhere; }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
 .badge {
-  align-self: flex-start; margin: 4px 0 0; padding: 2px 9px; border-radius: 999px;
+  align-self: flex-start; margin: 0; padding: 2px 9px; border-radius: 999px;
   font-size: 0.8rem; font-weight: 600; letter-spacing: 0.01em;
   border: 1px solid currentColor; background: color-mix(in srgb, currentColor 12%, transparent);
 }
@@ -86,6 +87,17 @@ section h2 time { color: var(--muted); font-weight: 400; }
 .badge-on_plex, .badge-partial { color: var(--on-plex); }
 .badge-in_cinemas { color: var(--cinema); }
 .badge-released { color: var(--released); }
+.badge-highlight { color: var(--text); border-color: var(--line); background: var(--surface-2); }
+
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+.action {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px; border-radius: 8px;
+  font-size: 0.88rem; font-weight: 600; text-decoration: none; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.action:hover { border-color: var(--accent); }
+.action-trailer::before { content: "\25B6"; font-size: 0.7em; margin-right: 6px; color: var(--accent); }
+.action-details::after { content: "\2197"; margin-left: 5px; color: var(--muted); }
 
 .card-overview { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
 .card-overview summary { cursor: pointer; width: fit-content; color: var(--text); opacity: 0.8; }

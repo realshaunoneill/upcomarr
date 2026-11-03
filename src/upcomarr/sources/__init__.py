@@ -6,6 +6,7 @@ can never reach a record, and an unexpected type drops the item rather than cras
 
 from __future__ import annotations
 
+import re
 import urllib.parse
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
@@ -37,6 +38,29 @@ def as_int_set(value: Any) -> frozenset[int]:
     if not isinstance(value, list):
         return frozenset()
     return frozenset(v for v in value if as_int(v) is not None)
+
+
+_IMDB = re.compile(r"^tt\d{5,10}$")
+_YOUTUBE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+FINALE_TYPES = frozenset({"series", "season", "midseason"})
+
+
+def as_public_id(value: Any) -> int | None:
+    """A TMDB or TVDB id: a positive integer. They go into links, so nothing else gets through."""
+    number = as_int(value)
+    return number if number is not None and number > 0 else None
+
+
+def as_imdb(value: Any) -> str | None:
+    return value if isinstance(value, str) and _IMDB.match(value) else None
+
+
+def as_youtube(value: Any) -> str | None:
+    return value if isinstance(value, str) and _YOUTUBE.match(value) else None
+
+
+def as_finale(value: Any) -> str | None:
+    return value if value in FINALE_TYPES else None
 
 
 def as_utc(value: Any) -> datetime | None:

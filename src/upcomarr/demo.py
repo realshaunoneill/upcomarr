@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from . import __version__, leakcheck, render, schedule
 from .app import asset_version, write_site
-from .model import Episode, Movie, PosterRef
+from .model import Episode, Links, Movie, PosterRef
 from .publish import Layout, publish, write_json
 
 TZ = ZoneInfo("Europe/Dublin")
@@ -46,6 +46,12 @@ SHOWS = (
     ),
     ("Harbour Lights", "Northlight", "A coastal police drama.", [(0, "22:00", 3, 1, 2, False)]),
 )
+
+# Sonarr's finaleType for a few episodes, so the demo shows the highlights.
+FINALES = {("The Lighthouse Keepers", 2, 5): "season", ("Night Market", 1, 8): "season"}
+# Made-up trailer ids: the links go to YouTube but nowhere real.
+TRAILERS = {"The Last Ferry": "demoTrailer1", "Signal Fires": "demoTrailer2", "Copper Coast": "demoTrailer3"}
+LINKS = Links(movie="https://request.example.com/movie/{tmdb}", tv="https://request.example.com/tv/{tmdb}")
 
 MOVIES = (
     # title, year, studio, overview, cinema offset, digital offset, physical offset, on plex days ago
@@ -113,6 +119,8 @@ def sample(now: datetime) -> tuple[list[Episode], list[Movie], dict[str, str], d
                         day,
                         on_plex,
                         ref,
+                        tmdb=900_000 + i,
+                        finale=FINALES.get((title, season, number)),
                     )
                 )
     for j, (title, year, studio, overview, cinema, digital, physical, added) in enumerate(MOVIES):
@@ -137,6 +145,8 @@ def sample(now: datetime) -> tuple[list[Episode], list[Movie], dict[str, str], d
                 added is not None,
                 at(-added) if added is not None else None,
                 ref,
+                tmdb=800_000 + j,
+                trailer=TRAILERS.get(title),
             )
         )
     return episodes, movies, posters, files
@@ -148,13 +158,14 @@ def render_demo(layout: Layout, now: datetime | None = None) -> None:
     episodes, movies, posters, files = sample(now)
     for name, data in files.items():
         (layout.posters / name).write_bytes(data)
-    sched = schedule.build(episodes, movies, now, TZ, 3, 60, 90, posters)
+    sched = schedule.build(episodes, movies, now, TZ, 3, 60, 90, posters, LINKS)
     meta = render.Meta(
         title="Coming soon",
         generated_at=now,
         tz_name="Europe/Dublin",
         version=__version__,
         asset_version=asset_version(),
+        details_label=LINKS.label,
         sources={
             "tv": render.SourceStatus("TV", True, False, now, None),
             "movies": render.SourceStatus("Movies", True, False, now, None),

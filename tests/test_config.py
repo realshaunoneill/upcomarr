@@ -70,6 +70,42 @@ class ConfigTest(unittest.TestCase):
         self.assertTrue(cfg.include_unmonitored)
         self.assertEqual(cfg.sources[0].tags, ("kids", "shared"))
 
+    def test_links_default_off(self):
+        cfg = load(BASE)
+        self.assertIsNone(cfg.links.movie)
+        self.assertIsNone(cfg.links.tv)
+        self.assertTrue(cfg.links.trailers)
+        self.assertEqual(cfg.links.label, "Details")
+
+    def test_seerr_shortcut_and_overrides(self):
+        cfg = load({**BASE, "SEERR_URL": "https://request.example.com/", "DETAILS_LABEL": "Request or read more"})
+        self.assertEqual(cfg.links.movie, "https://request.example.com/movie/{tmdb}")
+        self.assertEqual(cfg.links.tv, "https://request.example.com/tv/{tmdb}")
+        self.assertEqual(cfg.links.label, "Request or read more")
+        cfg = load(
+            {
+                **BASE,
+                "SEERR_URL": "https://request.example.com",
+                "DETAILS_URL_TV": "https://trakt.tv/search/tvdb/{tvdb}?id_type=show",
+            }
+        )
+        self.assertEqual(cfg.links.tv, "https://trakt.tv/search/tvdb/{tvdb}?id_type=show")
+        self.assertEqual(cfg.links.movie, "https://request.example.com/movie/{tmdb}")
+        self.assertFalse(load({**BASE, "SHOW_TRAILERS": "false"}).links.trailers)
+
+    def test_bad_templates(self):
+        for value in (
+            "https://www.imdb.com/title/",  # no placeholder
+            "https://x.example/{tmdb}/{year}",  # unknown placeholder
+            "javascript:alert({tmdb})",
+            "https://{tmdb}.example.com/",  # placeholder in the host
+            "https://user:pw@x.example/{tmdb}",
+        ):
+            with self.subTest(value=value), self.assertRaises(ConfigError):
+                load({**BASE, "DETAILS_URL_MOVIE": value})
+        with self.assertRaises(ConfigError):
+            load({**BASE, "SEERR_URL": "request.example.com"})
+
 
 if __name__ == "__main__":
     unittest.main()

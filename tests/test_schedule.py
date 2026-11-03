@@ -3,14 +3,25 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from upcomarr import schedule
-from upcomarr.model import EXPECTED, IN_CINEMAS, ON_PLEX, PARTIAL, RELEASED, Episode, Movie, PosterRef
+from upcomarr.model import EXPECTED, IN_CINEMAS, ON_PLEX, PARTIAL, RELEASED, Episode, Links, Movie, PosterRef
 
 DUBLIN = ZoneInfo("Europe/Dublin")
 LA = ZoneInfo("America/Los_Angeles")
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 
 
-def ep(season, number, air_utc=None, air_date=None, has_file=False, series_id=1, title="Show", ep_title=None):
+def ep(
+    season,
+    number,
+    air_utc=None,
+    air_date=None,
+    has_file=False,
+    series_id=1,
+    title="Show",
+    ep_title=None,
+    finale=None,
+    tmdb=None,
+):
     return Episode(
         series_id,
         title,
@@ -23,6 +34,8 @@ def ep(season, number, air_utc=None, air_date=None, has_file=False, series_id=1,
         air_date,
         has_file,
         PosterRef("sonarr", series_id, "v1"),
+        tmdb=tmdb,
+        finale=finale,
     )
 
 
@@ -185,6 +198,72 @@ class MovieTest(unittest.TestCase):
             {},
         )
         self.assertEqual([e.title for e in sched.days[0].entries], ["Early", "Late", "A film"])
+
+
+class HighlightTest(unittest.TestCase):
+    def test_rules(self):
+        cases = [
+            ([ep(1, 1)], "new_series"),
+            ([ep(3, 1)], "season_premiere"),
+            ([ep(3, 4)], None),
+            ([ep(3, 9, finale="midseason")], "midseason_finale"),
+            ([ep(3, 10, finale="season")], "season_finale"),
+            ([ep(5, 12, finale="series")], "series_finale"),
+            ([ep(2, n, finale="season" if n == 8 else None) for n in range(1, 9)], "full_season"),
+            ([ep(1, n, finale="series" if n == 6 else None) for n in range(1, 7)], "new_series_full"),
+            ([ep(0, 1)], None),  # specials never
+            ([ep(0, 1, finale="season")], None),
+        ]
+        for eps, want in cases:
+            with self.subTest(want=want, eps=[(e.season, e.episode, e.finale) for e in eps]):
+                self.assertEqual(schedule.highlight(eps), want)
+
+    def test_highlight_reaches_the_entry(self):
+        sched = schedule.build([ep(2, 10, utc(2026, 11, 5, 20), finale="season")], [], NOW, DUBLIN, 3, 60, 90, {})
+        self.assertEqual(sched.days[0].entries[0].highlight, "season_finale")
+
+
+class LinkTest(unittest.TestCase):
+    def test_fill(self):
+        self.assertEqual(schedule.fill("https://x.example/movie/{tmdb}", tmdb=603), "https://x.example/movie/603")
+        self.assertEqual(
+            schedule.fill("https://x.example/t/{imdb}?s={tvdb}", tvdb=12, imdb="tt0133093"),
+            "https://x.example/t/tt0133093?s=12",
+        )
+        self.assertIsNone(schedule.fill("https://x.example/movie/{tmdb}"))  # id unknown: no half link
+        self.assertIsNone(schedule.fill(None, tmdb=1))
+
+    def test_entries_get_links_and_trailers(self):
+        links = Links(movie="https://r.example/movie/{tmdb}", tv="https://r.example/tv/{tmdb}")
+        sched = schedule.build(
+            [ep(1, 3, utc(2026, 11, 5, 20), tmdb=1399), ep(1, 3, utc(2026, 11, 5, 21), series_id=2, title="No ids")],
+            [mv(digital=date(2026, 11, 6), tmdb=603, trailer="vKQi3bBA1y8")],
+            NOW,
+            DUBLIN,
+            3,
+            60,
+            90,
+            {},
+            links,
+        )
+        by_title = {e.title: e for d in sched.days for e in d.entries}
+        self.assertEqual(by_title["Show"].link, "https://r.example/tv/1399")
+        self.assertIsNone(by_title["No ids"].link)
+        self.assertEqual(by_title["Film"].link, "https://r.example/movie/603")
+        self.assertEqual(by_title["Film"].trailer, "https://www.youtube.com/watch?v=vKQi3bBA1y8")
+        self.assertIsNone(by_title["Show"].trailer)
+        no_trailers = schedule.build(
+            [],
+            [mv(digital=date(2026, 11, 6), trailer="vKQi3bBA1y8")],
+            NOW,
+            DUBLIN,
+            3,
+            60,
+            90,
+            {},
+            Links(trailers=False),
+        )
+        self.assertIsNone(no_trailers.days[0].entries[0].trailer)
 
 
 if __name__ == "__main__":

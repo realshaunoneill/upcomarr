@@ -54,6 +54,7 @@ class Meta:
     version: str
     asset_version: str
     sources: dict[str, SourceStatus]  # "tv" / "movies", configured sources only
+    details_label: str = "Details"
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -93,7 +94,27 @@ def _badge(entry: Entry) -> tuple[str, str | None]:
     return entry.badge, None
 
 
-def _card(entry: Entry, compact: bool = False) -> str:
+HIGHLIGHT_TEXT = {
+    "new_series": "New series",
+    "season_premiere": "Season premiere",
+    "full_season": "Full season",
+    "new_series_full": "New series · full season",
+    "midseason_finale": "Mid-season finale",
+    "season_finale": "Season finale",
+    "series_finale": "Series finale",
+}
+
+
+def _action(url: str, text: str, kind: str, title: str) -> str:
+    """A link out of the page. It is a navigation, so the CSP does not restrict it; no-referrer keeps the
+    page's address out of the other site's logs."""
+    return (
+        f'<a class="action action-{h(kind)}" href="{h(url)}" target="_blank" rel="noopener noreferrer" '
+        f'aria-label="{h(text)}: {h(title)}">{h(text)}</a>'
+    )
+
+
+def _card(entry: Entry, compact: bool = False, details_label: str = "Details") -> str:
     poster = f"p/{entry.poster}" if entry.poster else "placeholder.svg"
     meta_bits = [h(entry.label)]
     if entry.network:
@@ -112,11 +133,21 @@ def _card(entry: Entry, compact: bool = False) -> str:
     ]
     if entry.episode_title:
         parts.append(f'<p class="card-episode">{h(entry.episode_title)}</p>')
-    parts.append(f'<p class="badge badge-{h(entry.badge)}">{h(badge)}</p>')
+    badges = f'<span class="badge badge-{h(entry.badge)}">{h(badge)}</span>'
+    if entry.highlight in HIGHLIGHT_TEXT:
+        badges += f'<span class="badge badge-highlight">{h(HIGHLIGHT_TEXT[entry.highlight])}</span>'
+    parts.append(f'<p class="badges">{badges}</p>')
     if note:
         parts.append(f'<p class="card-note">{h(note)}</p>')
     if entry.overview and not compact:
         parts.append(f'<details class="card-overview"><summary>About</summary><p>{h(entry.overview)}</p></details>')
+    actions = []
+    if entry.trailer and not compact:
+        actions.append(_action(entry.trailer, "Trailer", "trailer", entry.title))
+    if entry.link and not compact:
+        actions.append(_action(entry.link, details_label, "details", entry.title))
+    if actions:
+        parts.append(f'<p class="card-actions">{"".join(actions)}</p>')
     parts.append("</div></li>")
     return "".join(parts)
 
@@ -190,7 +221,7 @@ def render_index(schedule: Schedule, meta: Meta) -> str:
                 f'<time datetime="{h(day.date.isoformat())}">{h(day.date_text)}</time></h2>'
                 '<ul class="cards">'
             )
-            body.extend(_card(e) for e in day.entries)
+            body.extend(_card(e, details_label=meta.details_label) for e in day.entries)
             body.append("</ul></section>")
     else:
         body.append('<p class="empty">Nothing is scheduled yet. Check back soon.</p>')

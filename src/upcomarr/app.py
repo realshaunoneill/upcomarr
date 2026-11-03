@@ -96,6 +96,7 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
         tv_days_ahead=sonarr_cfg.days_ahead if sonarr_cfg else 0,
         movie_days_ahead=radarr_cfg.days_ahead if radarr_cfg else 0,
         posters=posters,
+        links=cfg.links,
     )
     meta = render.Meta(
         title=cfg.site_title,
@@ -103,6 +104,7 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
         tz_name=cfg.tz_name,
         version=__version__,
         asset_version=asset_version(),
+        details_label=cfg.links.label,
         sources={
             LABELS[name][0]: render.SourceStatus(LABELS[name][1], r.ok, r.stale, r.last_success, r.error)
             for name, r in results.items()

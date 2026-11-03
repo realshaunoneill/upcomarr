@@ -12,7 +12,7 @@
 
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.1.2
+    image: ghcr.io/realshaunoneill/upcomarr:0.2.0
     restart: unless-stopped
     environment:
       SONARR_URL: http://sonarr:8989
@@ -21,6 +21,7 @@ services:
       RADARR_API_KEY_FILE: /run/secrets/radarr_api_key
       TZ: Europe/Dublin
       SITE_TITLE: Coming soon
+      # SEERR_URL: https://request.example.com   # a details button into your request app
     secrets: [sonarr_api_key, radarr_api_key]
     volumes:
       - site:/out
@@ -31,7 +32,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.2
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.2.0
     restart: unless-stopped
     volumes:
       - site:/srv/site:ro

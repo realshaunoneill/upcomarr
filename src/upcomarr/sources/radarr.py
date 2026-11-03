@@ -13,7 +13,17 @@ from typing import Any
 from .. import tags
 from ..http import Client, FetchError
 from ..model import Movie
-from . import as_day, as_int, as_int_set, as_str, collect_sensitive, matches_tags
+from . import (
+    as_day,
+    as_imdb,
+    as_int,
+    as_int_set,
+    as_public_id,
+    as_str,
+    as_youtube,
+    collect_sensitive,
+    matches_tags,
+)
 from . import poster_ref as _poster_ref
 
 API = "v3"
@@ -75,4 +85,7 @@ def project(item: Any, include_unmonitored: bool, wanted: frozenset[int] | None)
         has_file=has_file,
         file_added=file_added,
         poster=_poster_ref(NAME, movie_id, item.get("images")),
+        tmdb=as_public_id(item.get("tmdbId")),
+        imdb=as_imdb(item.get("imdbId")),
+        trailer=as_youtube(item.get("youTubeTrailerId")),
     )

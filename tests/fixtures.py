@@ -48,10 +48,12 @@ def series(
     tags: tuple[int, ...] = (),
     overview: str | None = None,
     last_write: str = "638987000000000000",
+    tmdb: int | None = 610001,
 ) -> dict[str, Any]:
     return {
         "id": item_id,
         "title": title,
+        "tmdbId": tmdb,
         "network": network,
         "overview": overview if overview is not None else f"About {title}.",
         "tags": list(tags),
@@ -88,6 +90,7 @@ def episode(
     title: str | None = None,
     monitored: bool = True,
     air_date: str | None = None,
+    finale: str | None = None,
 ) -> dict[str, Any]:
     return {
         "id": 990000 + number,
@@ -105,7 +108,7 @@ def episode(
         "hasFile": has_file,
         "monitored": monitored,
         "unverifiedSceneNumbering": False,
-        "finaleType": canary("episode.finaleType"),
+        "finaleType": finale if finale is not None else canary("episode.finaleType"),
     }
 
 
@@ -120,6 +123,7 @@ def movie(
     tags: tuple[int, ...] = (),
     monitored: bool = True,
     overview: str | None = None,
+    trailer: str | None = None,
 ) -> dict[str, Any]:
     def day(value: str | None) -> str | None:
         return f"{value}T00:00:00Z" if value else None
@@ -158,7 +162,7 @@ def movie(
         "sizeOnDisk": 4321987654 if has_file else 0,
         "qualityProfileId": 9,
         "minimumAvailability": "released",
-        "youTubeTrailerId": canary("movie.youTubeTrailerId"),
+        "youTubeTrailerId": trailer if trailer is not None else canary("movie.youTubeTrailerId"),
         "imdbId": canary("movie.imdbId"),
         "tmdbId": 4440001,
         "certification": canary("movie.certification"),
@@ -180,7 +184,7 @@ def sonarr_calendar() -> list[dict[str, Any]]:
     keepers = series(SERIES_IDS[0], "The Lighthouse Keepers")
     market = series(SERIES_IDS[1], "Night Market", network="Channel 9")
     moons = series(SERIES_IDS[2], "Paper Moons", network=None)
-    out = [episode(keepers, 2, 5, "2026-11-03T21:00:00Z")]
+    out = [episode(keepers, 2, 5, "2026-11-03T21:00:00Z", finale="season")]
     out += [episode(market, 1, n, "2026-11-05T20:00:00Z") for n in range(1, 9)]
     out += [
         episode(moons, 4, 3, "2026-11-01T20:30:00Z", has_file=True),  # just arrived
@@ -191,7 +195,14 @@ def sonarr_calendar() -> list[dict[str, Any]]:
 
 def radarr_calendar() -> list[dict[str, Any]]:
     return [
-        movie(MOVIE_IDS[0], "The Last Ferry", cinema="2026-09-24", digital="2026-11-05", physical="2026-12-03"),
+        movie(
+            MOVIE_IDS[0],
+            "The Last Ferry",
+            cinema="2026-09-24",
+            digital="2026-11-05",
+            physical="2026-12-03",
+            trailer="aBcDeFgHiJk",
+        ),
         movie(MOVIE_IDS[1], "Signal Fires", cinema="2026-11-08"),
         movie(MOVIE_IDS[2], "Orchard", cinema="2026-09-01", digital="2026-11-02"),
         movie(

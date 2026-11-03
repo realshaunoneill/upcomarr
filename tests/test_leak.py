@@ -28,7 +28,7 @@ ALLOWED_KEYS = {
     "date", "label", "entries",
     # entries
     "kind", "episode_title", "count", "on_plex_count", "network", "overview", "time", "badge",
-    "on_plex", "expected_date", "expected_via", "cinema_date", "poster",
+    "on_plex", "expected_date", "expected_via", "cinema_date", "poster", "highlight", "trailer", "link",
 }  # fmt: skip
 
 
@@ -65,6 +65,7 @@ class LeakTest(unittest.TestCase):
                 "RADARR_API_KEY": fixtures.OTHER_KEY,
                 "TZ": "Europe/Dublin",
                 "OUT_DIR": str(self.out),
+                "SEERR_URL": "https://request.example.com",
             }
         )
 
@@ -116,6 +117,14 @@ class LeakTest(unittest.TestCase):
             {"The Lighthouse Keepers", "Night Market", "Paper Moons", "The Last Ferry", "Signal Fires", "Orchard"},
         )
         self.assertEqual({e["title"] for e in data["recent"]}, {"Paper Moons", "Small Hours"})
+        entries = {e["title"]: e for d in data["days"] for e in d["entries"]}
+        # Valid ids become links; the canary trailer ids and finale types were rejected, not passed on.
+        self.assertEqual(entries["The Last Ferry"]["trailer"], "https://www.youtube.com/watch?v=aBcDeFgHiJk")
+        self.assertIsNone(entries["Signal Fires"]["trailer"])
+        self.assertEqual(entries["The Last Ferry"]["link"], "https://request.example.com/movie/4440001")
+        self.assertEqual(entries["Night Market"]["link"], "https://request.example.com/tv/610001")
+        self.assertEqual(entries["The Lighthouse Keepers"]["highlight"], "season_finale")
+        self.assertEqual(entries["Night Market"]["highlight"], "new_series")
 
     def test_private_state_is_outside_the_served_tree(self):
         run_once(self.config(), Layout(self.out), Registry(), now=fixtures.NOW)

@@ -8,7 +8,18 @@ from typing import Any
 from .. import tags
 from ..http import Client, FetchError
 from ..model import Episode
-from . import as_day, as_int, as_int_set, as_str, as_utc, collect_sensitive, matches_tags
+from . import (
+    as_day,
+    as_finale,
+    as_imdb,
+    as_int,
+    as_int_set,
+    as_public_id,
+    as_str,
+    as_utc,
+    collect_sensitive,
+    matches_tags,
+)
 from . import poster_ref as _poster_ref
 
 API = "v3"
@@ -77,4 +88,8 @@ def project(item: Any, include_unmonitored: bool, wanted: frozenset[int] | None)
         air_date=air_date,
         has_file=item.get("hasFile") is True,
         poster=_poster_ref(NAME, series_id, series.get("images")),
+        tmdb=as_public_id(series.get("tmdbId")),
+        tvdb=as_public_id(series.get("tvdbId")),
+        imdb=as_imdb(series.get("imdbId")),
+        finale=as_finale(item.get("finaleType")),
     )

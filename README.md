@@ -11,6 +11,10 @@ arrs.
 - **Movies** go on the day they are expected on Plex (the digital release, else the physical
   one), with the cinema date as context. A movie with only a cinema date shows as "In cinemas".
 - **Just arrived** lists what landed in the last few days.
+- **Highlights** flag premieres and finales: New series, Season premiere, Full season (a whole season on
+  one day), Mid-season finale, Season finale and Series finale, from Sonarr's own data.
+- **Buttons** on each card: the film's trailer (from Radarr), and a details link to your request app or
+  any site you choose (see [Detail links](#detail-links)).
 - **On a phone** it works as well as on a desktop, and needs no JavaScript. With JavaScript,
   viewers can filter to TV or movies and hide what is already on Plex.
 
@@ -54,7 +58,7 @@ Authelia, oauth2-proxy, or your reverse proxy's auth.
 # compose.yaml (the full example, with notes, is in this repository)
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.1.2
+    image: ghcr.io/realshaunoneill/upcomarr:0.2.0
     environment:
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
@@ -70,7 +74,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.2
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.2.0
     volumes: [site:/srv/site:ro]
     networks: [upcomarr-web] # put your tunnel or reverse proxy on this network too
     read_only: true
@@ -110,8 +114,36 @@ set, never their values.
 | `INTERVAL_SECONDS` | `1800` | It also refreshes just after local midnight, so "Today" is right. |
 | `METRICS_PORT` | `0` (off) | Prometheus metrics on `/metrics`. |
 | `REQUEST_TIMEOUT_SECONDS` | `20` | A total limit per request. |
+| `SEERR_URL` | | Your request app's address as viewers see it, e.g. `https://request.example.com`. Adds a details button that opens each title in Seerr, Overseerr or Jellyseerr. |
+| `DETAILS_URL_MOVIE`, `DETAILS_URL_TV` | | Templates for the details button, used instead of (or alongside) `SEERR_URL`. |
+| `DETAILS_LABEL` | `Details` | The details button's text. |
+| `SHOW_TRAILERS` | `true` | A Trailer button on films, linking to YouTube. |
 
 If an arr is unreachable, the page keeps that source's last good data and says how old it is.
+
+### Detail links
+
+`SEERR_URL` is the shortcut: Seerr, Overseerr and Jellyseerr all open a title at `/movie/<tmdb id>` and
+`/tv/<tmdb id>`. To point the button anywhere else, set a template with any of `{tmdb}`, `{tvdb}` and `{imdb}`:
+
+```yaml
+# The Movie Database
+DETAILS_URL_MOVIE: https://www.themoviedb.org/movie/{tmdb}
+DETAILS_URL_TV: https://www.themoviedb.org/tv/{tmdb}
+DETAILS_LABEL: TMDB
+```
+
+```yaml
+# IMDb, for films and series alike
+DETAILS_URL_MOVIE: https://www.imdb.com/title/{imdb}/
+DETAILS_URL_TV: https://www.imdb.com/title/{imdb}/
+DETAILS_LABEL: IMDb
+```
+
+A template must be an `http(s)` URL with its placeholders after the host. The ids are checked before they
+are used: positive numbers for TMDB and TVDB, `tt` plus digits for IMDb, and YouTube's id format for
+trailers. A title whose id is missing gets no button rather than a broken one. All links open in a new tab
+with no referrer, and the page still loads nothing from any other site.
 
 ## Monitoring
 

@@ -37,6 +37,11 @@ class Episode:
     air_date: date | None
     has_file: bool
     poster: PosterRef | None
+    # Public ids, used only to build the configured details link. Validated in sources/.
+    tmdb: int | None = None
+    tvdb: int | None = None
+    imdb: str | None = None
+    finale: str | None = None  # Sonarr's finaleType: "series", "season" or "midseason"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -52,6 +57,9 @@ class Movie:
     has_file: bool
     file_added: date | None
     poster: PosterRef | None
+    tmdb: int | None = None
+    imdb: str | None = None
+    trailer: str | None = None  # a YouTube video id, validated in sources/
 
 
 # Badges, in the words the page uses.
@@ -61,6 +69,23 @@ PARTIAL = "partial"
 EXPECTED = "expected"
 RELEASED = "released"
 IN_CINEMAS = "in_cinemas"
+
+# Highlights: an extra tag on a TV entry, worked out in schedule.highlight().
+HIGHLIGHTS = (
+    "new_series", "season_premiere", "full_season", "new_series_full",
+    "midseason_finale", "season_finale", "series_finale",
+)  # fmt: skip
+
+
+@dataclasses.dataclass(frozen=True)
+class Links:
+    """Where a card's buttons point. Templates take {tmdb}, {tvdb} and {imdb}; a link whose id is
+    unknown is left out rather than half-filled."""
+
+    movie: str | None = None
+    tv: str | None = None
+    label: str = "Details"
+    trailers: bool = True
 
 
 @dataclasses.dataclass(frozen=True)
@@ -81,6 +106,9 @@ class Entry:
     expected_via: str | None  # "digital" or "physical"
     cinema_date: str | None
     poster: str | None  # file name under p/, or None for the placeholder
+    highlight: str | None = None  # one of HIGHLIGHTS, TV only
+    trailer: str | None = None  # https://www.youtube.com/watch?v=<id>, movies only
+    link: str | None = None  # the configured details link, filled in
 
 
 ENTRY_FIELDS = tuple(f.name for f in dataclasses.fields(Entry))
@@ -134,6 +162,10 @@ def episode_from_state(raw: dict[str, Any]) -> Episode:
         air_date=_d(raw.get("air_date")),
         has_file=bool(raw["has_file"]),
         poster=_poster(raw.get("poster")),
+        tmdb=raw.get("tmdb"),
+        tvdb=raw.get("tvdb"),
+        imdb=raw.get("imdb"),
+        finale=raw.get("finale"),
     )
 
 
@@ -150,4 +182,7 @@ def movie_from_state(raw: dict[str, Any]) -> Movie:
         has_file=bool(raw["has_file"]),
         file_added=_d(raw.get("file_added")),
         poster=_poster(raw.get("poster")),
+        tmdb=raw.get("tmdb"),
+        imdb=raw.get("imdb"),
+        trailer=raw.get("trailer"),
     )

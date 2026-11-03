@@ -1,3 +1,4 @@
+import dataclasses
 import re
 import unittest
 from datetime import UTC, date, datetime, timedelta
@@ -5,7 +6,7 @@ from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
 from upcomarr import render, schedule
-from upcomarr.model import Episode, Movie, PosterRef
+from upcomarr.model import Episode, Links, Movie, PosterRef
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 VOID = {"meta", "link", "img", "input", "br", "hr"}
@@ -22,7 +23,7 @@ def meta(**sources):
     )
 
 
-def sample(title="Show", overview="About.", network="Net"):
+def sample(title="Show", overview="About.", network="Net", links=False):
     eps = [
         Episode(
             1,
@@ -38,8 +39,31 @@ def sample(title="Show", overview="About.", network="Net"):
             PosterRef("sonarr", 1, "v"),
         )
     ]
-    movies = [Movie(2, "Film", 2026, "Studio", "About the film.", date(2026, 11, 8), None, None, False, None, None)]
-    return schedule.build(eps, movies, NOW, ZoneInfo("Europe/Dublin"), 3, 60, 90, {"sonarr:1": "abcd.jpg"})
+    movies = [
+        Movie(
+            2,
+            "Film",
+            2026,
+            "Studio",
+            "About the film.",
+            date(2026, 11, 8),
+            None,
+            None,
+            False,
+            None,
+            None,
+            tmdb=603 if links else None,
+            trailer="vKQi3bBA1y8" if links else None,
+        )
+    ]
+    if links:
+        eps = [dataclasses.replace(eps[0], finale="season")]
+    cfg = (
+        Links(movie="https://request.example.com/movie/{tmdb}", tv="https://request.example.com/tv/{tmdb}")
+        if links
+        else None
+    )
+    return schedule.build(eps, movies, NOW, ZoneInfo("Europe/Dublin"), 3, 60, 90, {"sonarr:1": "abcd.jpg"}, cfg)
 
 
 class Balance(HTMLParser):
@@ -68,13 +92,28 @@ class RenderTest(unittest.TestCase):
         self.assertNotIn("<img src=x", html)
         self.assertIn("Coming &lt;soon&gt;", html)
 
-    def test_no_inline_code_or_external_urls(self):
-        html = render.render_index(sample(), meta())
+    def test_no_inline_code_or_external_loads(self):
+        html = render.render_index(sample(links=True), meta())
         self.assertIsNone(re.search(r"<script(?![^>]*\bsrc=)", html), "inline script")
         self.assertNotRegex(html, r"\sstyle=")
         self.assertNotRegex(html, r"\son[a-z]+=")
         self.assertNotIn("javascript:", html)
-        self.assertNotRegex(html, r"(?:src|href)=\"(?:https?:)?//")
+        # Nothing is loaded from another origin; links out are allowed, but only as new-tab, no-referrer links.
+        self.assertNotRegex(html, r"\ssrc=\"(?:https?:)?//")
+        external = re.findall(r"<a [^>]*href=\"https?://[^\"]+\"[^>]*>", html)
+        self.assertEqual(len(external), 2)  # the trailer and the details link
+        for tag in external:
+            self.assertIn('rel="noopener noreferrer"', tag)
+            self.assertIn('target="_blank"', tag)
+
+    def test_actions_and_highlight(self):
+        html = render.render_index(sample(links=True), meta())
+        self.assertIn('href="https://www.youtube.com/watch?v=vKQi3bBA1y8"', html)
+        self.assertIn('href="https://request.example.com/movie/603"', html)
+        self.assertIn(">New series · full season<", html)  # S01E01 that is also the season finale
+        self.assertIn('aria-label="Trailer: Film"', html)
+        plain = render.render_index(sample(), meta())
+        self.assertNotIn("card-actions", plain)
 
     def test_structure(self):
         html = render.render_index(sample(), meta())
