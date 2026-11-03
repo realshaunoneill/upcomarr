@@ -10,6 +10,14 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
+def _number(value: float) -> str:
+    """Full precision. `:g` keeps six significant digits, which turned a Unix timestamp such as
+    1793678332 into 1.79368e+09, about 80 minutes out."""
+    if value.is_integer() and abs(value) < 2**53:
+        return str(int(value))
+    return repr(value)
+
+
 class Registry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -31,7 +39,7 @@ class Registry:
                 for labels, value in sorted(series.items()):
                     label_text = ",".join(f'{k}="{v}"' for k, v in labels)
                     suffix = f"{{{label_text}}}" if label_text else ""
-                    lines.append(f"{name}{suffix} {value:g}")
+                    lines.append(f"{name}{suffix} {_number(value)}")
         return "\n".join(lines) + "\n"
 
 

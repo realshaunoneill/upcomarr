@@ -54,7 +54,7 @@ Authelia, oauth2-proxy, or your reverse proxy's auth.
 # compose.yaml (the full example, with notes, is in this repository)
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.1.1
+    image: ghcr.io/realshaunoneill/upcomarr:0.1.2
     environment:
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
@@ -70,7 +70,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.1
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.2
     volumes: [site:/srv/site:ro]
     networks: [upcomarr-web] # put your tunnel or reverse proxy on this network too
     read_only: true

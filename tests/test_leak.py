@@ -78,7 +78,10 @@ class LeakTest(unittest.TestCase):
         registry = Registry()
         ok = run_once(self.config(), Layout(self.out), registry, now=fixtures.NOW)
         self.assertTrue(ok)
-        self.assertIn(f"upcomarr_last_publish_timestamp_seconds {fixtures.NOW.timestamp():g}", registry.render())
+        line = next(
+            x for x in registry.render().splitlines() if x.startswith("upcomarr_last_publish_timestamp_seconds ")
+        )
+        self.assertEqual(float(line.split()[1]), fixtures.NOW.timestamp())  # parsed back, at full precision
         forbidden = [
             "CANARY",
             fixtures.API_KEY,
