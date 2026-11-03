@@ -1,0 +1,20 @@
+# Only tool settings: upcomarr is shipped as a container image, not a Python package.
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "S", "N", "A", "RUF"]
+ignore = [
+  "S101",   # assert is fine
+  "S310",   # urlopen: URLs are validated to http(s) in config.py
+  "RUF001", # en dashes in labels are deliberate
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "N802", "E501"]
+"src/upcomarr/demo.py" = ["E501"]

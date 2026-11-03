@@ -1,0 +1,58 @@
+# Example deployment. Two containers share one volume:
+#
+#   upcomarr       holds the Sonarr/Radarr API keys, reaches the arrs, writes the site.
+#                  Nothing connects to it (except Prometheus, if you turn metrics on).
+#   upcomarr-web   serves the site. It holds no key, and sits on an INTERNAL network, so
+#                  even if it were compromised it could not reach your arrs or the internet.
+#
+# Put whatever fronts the page (a Cloudflare tunnel, a reverse proxy with a login) on the
+# `upcomarr-web` network, and point it at http://upcomarr-web:8080. An internal network cannot
+# publish ports; if you want `ports:` instead, make that network non-internal and accept
+# that the web container can then reach everything else on your LAN.
+
+services:
+  upcomarr:
+    image: ghcr.io/realshaunoneill/upcomarr:0.1.0
+    restart: unless-stopped
+    environment:
+      SONARR_URL: http://sonarr:8989
+      SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
+      RADARR_URL: http://radarr:7878
+      RADARR_API_KEY_FILE: /run/secrets/radarr_api_key
+      TZ: Europe/Dublin
+      SITE_TITLE: Coming soon
+    secrets: [sonarr_api_key, radarr_api_key]
+    volumes:
+      - site:/out
+    networks: [arr]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  upcomarr-web:
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.0
+    restart: unless-stopped
+    volumes:
+      - site:/srv/site:ro
+    networks: [upcomarr-web]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  site: {}
+
+networks:
+  # The network your arrs are on. Replace with `external: true` and its name if they run in
+  # another compose project.
+  arr: {}
+  upcomarr-web:
+    internal: true
+
+secrets:
+  sonarr_api_key:
+    file: ./secrets/sonarr_api_key
+  radarr_api_key:
+    file: ./secrets/radarr_api_key

@@ -1,0 +1,5 @@
+*
+!src/upcomarr/**
+!web/nginx.conf
+!web/headers.conf
+**/__pycache__
