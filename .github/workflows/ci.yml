@@ -81,11 +81,13 @@ jobs:
         run: tests/smoke.sh upcomarr:ci upcomarr-web:ci
       - name: Scan both images (HIGH and CRITICAL with a fix available)
         run: |
+          status=0
           for image in upcomarr:ci upcomarr-web:ci; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
               aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
-              image --quiet --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$image"
+              image --quiet --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$image" || status=1
           done
+          exit $status
       - name: Build both for arm64 (not pushed)
         run: |
           docker buildx build --platform linux/arm64 -f Dockerfile .

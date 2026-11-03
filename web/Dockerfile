@@ -3,6 +3,13 @@
 # access of its own; only whatever fronts it (a tunnel, a reverse proxy) needs to reach it.
 FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 
+# curl (and the libcurl and brotli it pulls in) is unused here: the healthcheck is busybox
+# wget. Removing it, and taking Alpine's fixes, keeps the scanner clean between base releases.
+USER root
+RUN apk upgrade --no-cache \
+ && apk del --no-cache curl
+USER 101
+
 COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY web/headers.conf /etc/nginx/upcomarr/headers.conf
 RUN nginx -t

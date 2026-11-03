@@ -11,8 +11,11 @@ WORKDIR /app
 COPY src/upcomarr ./upcomarr
 
 # zoneinfo has no fallback if the tz database is missing, so prove it is there.
+# pip goes: upcomarr is standard library only, and pip's vendored urllib3 and msgpack are
+# where this image's scanner findings came from.
 # /out is owned by the image's user so a fresh named volume is writable.
 RUN python -c "import zoneinfo; [zoneinfo.ZoneInfo(z) for z in ('Europe/Dublin', 'America/Los_Angeles', 'Australia/Sydney')]" \
+ && python -m pip uninstall --yes --quiet --root-user-action=ignore pip \
  && python -m compileall -q upcomarr \
  && mkdir -p /out \
  && chown 10001:10001 /out
