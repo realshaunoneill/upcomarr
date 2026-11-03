@@ -72,7 +72,7 @@ def main(base: str, site: str) -> int:
 
     for path in ("/p/", "/builds/", "/.state/sonarr.json", "/status.json", "/../status.json", "/nope", "/.hidden"):
         status, headers, _ = request(base, "GET", path)
-        expect(status in (403, 404), f"{path} is not served ({status})")
+        expect(status in (400, 403, 404), f"{path} is not served ({status})")  # 400: nginx refuses ".."
         expect(headers.get("x-frame-options") == "DENY", f"{path} error still has the headers")
     for method in ("POST", "PUT", "DELETE"):
         status, _, _ = request(base, method, "/")
