@@ -15,6 +15,7 @@ from . import (
     as_int,
     as_int_set,
     as_public_id,
+    as_runtime,
     as_str,
     as_utc,
     collect_sensitive,
@@ -92,4 +93,5 @@ def project(item: Any, include_unmonitored: bool, wanted: frozenset[int] | None)
         tvdb=as_public_id(series.get("tvdbId")),
         imdb=as_imdb(series.get("imdbId")),
         finale=as_finale(item.get("finaleType")),
+        runtime=as_runtime(item.get("runtime"), series.get("runtime")),
     )

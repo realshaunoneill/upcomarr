@@ -126,7 +126,13 @@ def _links(env: Mapping[str, str]) -> Links:
     movie = _template(env, "DETAILS_URL_MOVIE") or movie
     tv = _template(env, "DETAILS_URL_TV") or tv
     label = env.get("DETAILS_LABEL", "").strip()[:30] or "Details"
-    return Links(movie=movie, tv=tv, label=label, trailers=_bool(env, "SHOW_TRAILERS", True))
+    return Links(
+        movie=movie,
+        tv=tv,
+        label=label,
+        trailers=_bool(env, "SHOW_TRAILERS", True),
+        calendar=_bool(env, "CALENDAR_BUTTONS", True),
+    )
 
 
 def _tags(env: Mapping[str, str], name: str) -> tuple[str, ...]:

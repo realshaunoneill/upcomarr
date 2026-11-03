@@ -14,7 +14,8 @@ arrs.
 - **Highlights** flag premieres and finales: New series, Season premiere, Full season (a whole season on
   one day), Mid-season finale, Season finale and Series finale, from Sonarr's own data.
 - **Buttons** on each card: the film's trailer (from Radarr), and a details link to your request app or
-  any site you choose (see [Detail links](#detail-links)).
+  any site you choose (see [Detail links](#detail-links)), and **Add to calendar** on everything still
+  coming (see [Calendar buttons](#calendar-buttons)).
 - **On a phone** it works as well as on a desktop, and needs no JavaScript. With JavaScript,
   viewers can filter to TV or movies and hide what is already on Plex.
 
@@ -58,7 +59,7 @@ Authelia, oauth2-proxy, or your reverse proxy's auth.
 # compose.yaml (the full example, with notes, is in this repository)
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.2.0
+    image: ghcr.io/realshaunoneill/upcomarr:0.3.0
     environment:
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
@@ -74,7 +75,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.2.0
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.3.0
     volumes: [site:/srv/site:ro]
     networks: [upcomarr-web] # put your tunnel or reverse proxy on this network too
     read_only: true
@@ -118,6 +119,7 @@ set, never their values.
 | `DETAILS_URL_MOVIE`, `DETAILS_URL_TV` | | Templates for the details button, used instead of (or alongside) `SEERR_URL`. |
 | `DETAILS_LABEL` | `Details` | The details button's text. |
 | `SHOW_TRAILERS` | `true` | A Trailer button on films, linking to YouTube. |
+| `CALENDAR_BUTTONS` | `true` | An Add to calendar button on each card still coming. |
 
 If an arr is unreachable, the page keeps that source's last good data and says how old it is.
 
@@ -144,6 +146,25 @@ A template must be an `http(s)` URL with its placeholders after the host. The id
 are used: positive numbers for TMDB and TVDB, `tt` plus digits for IMDb, and YouTube's id format for
 trailers. A title whose id is missing gets no button rather than a broken one. All links open in a new tab
 with no referrer, and the page still loads nothing from any other site.
+
+### Calendar buttons
+
+Each card that is still coming (an episode not yet on Plex, a film expected on Plex or in cinemas) gets an
+**Add to calendar** button. It is a one-off `.ics` file, generated with the page:
+
+- **Episodes** are timed events at their air time, lasting the runtime (an hour if Sonarr does not know it).
+  A season dropped at once is one event. With no air time, they are all-day events.
+- **Films** are all-day events on the day they are expected on Plex, or their cinema date.
+- **Events are marked free**, so they never block anyone's diary.
+- **Each event's id comes from the title and episode label, not the date.** Adding a card again after its date
+  moves updates the event in calendars that honour ids, rather than adding a second one.
+
+**It works behind any login.** The file is served from the same origin as the page, so it is downloaded with the
+viewer's existing session (Cloudflare Access, Authelia, anything), and the calendar app only imports it. It does
+not fetch the file again. The trade-off is that an imported event does not follow later date changes.
+
+A *subscribed* calendar would keep up, but calendar apps fetch subscriptions themselves, without the viewer's
+login, so it would need an unauthenticated (if unguessable) URL. upcomarr does not offer one yet.
 
 ## Monitoring
 

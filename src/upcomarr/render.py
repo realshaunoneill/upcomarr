@@ -146,6 +146,12 @@ def _card(entry: Entry, compact: bool = False, details_label: str = "Details") -
         actions.append(_action(entry.trailer, "Trailer", "trailer", entry.title))
     if entry.link and not compact:
         actions.append(_action(entry.link, details_label, "details", entry.title))
+    if entry.calendar and not compact:
+        # Same origin and through the same login as the page; opening it hands the event to the calendar app.
+        actions.append(
+            f'<a class="action action-calendar" href="{h(entry.calendar)}" '
+            f'aria-label="Add to calendar: {h(entry.title)}">Add to calendar</a>'
+        )
     if actions:
         parts.append(f'<p class="card-actions">{"".join(actions)}</p>')
     parts.append("</div></li>")

@@ -70,6 +70,24 @@ def main(base: str, site: str) -> int:
         expect("immutable" in headers.get("cache-control", ""), "the poster is cached as immutable")
         expect(headers.get("x-content-type-options") == "nosniff", "the poster has the headers")
 
+    cal = next(
+        (
+            e["calendar"]
+            for d in json.loads(request(base, "GET", "/upcoming.json")[2])["days"]
+            for e in d["entries"]
+            if e.get("calendar")
+        ),
+        None,
+    )
+    expect(cal is not None, "an entry has a calendar file")
+    if cal:
+        status, headers, body = request(base, "GET", "/" + cal)
+        expect(status == 200 and body.startswith(b"BEGIN:VCALENDAR\r\n"), "the calendar file is served")
+        expect(headers.get("content-type", "").startswith("text/calendar"), "it is text/calendar")
+        expect(headers.get("x-content-type-options") == "nosniff", "it has the headers")
+    status, _, _ = request(base, "GET", "/cal/")
+    expect(status in (403, 404), "/cal/ has no listing")
+
     for path in ("/p/", "/builds/", "/.state/sonarr.json", "/status.json", "/../status.json", "/nope", "/.hidden"):
         status, headers, _ = request(base, "GET", path)
         expect(status in (400, 403, 404), f"{path} is not served ({status})")  # 400: nginx refuses ".."

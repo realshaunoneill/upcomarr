@@ -42,6 +42,7 @@ class Episode:
     tvdb: int | None = None
     imdb: str | None = None
     finale: str | None = None  # Sonarr's finaleType: "series", "season" or "midseason"
+    runtime: int | None = None  # minutes: the episode's, else the series'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -86,6 +87,7 @@ class Links:
     tv: str | None = None
     label: str = "Details"
     trailers: bool = True
+    calendar: bool = True  # an "Add to calendar" .ics per upcoming card
 
 
 @dataclasses.dataclass(frozen=True)
@@ -109,6 +111,9 @@ class Entry:
     highlight: str | None = None  # one of HIGHLIGHTS, TV only
     trailer: str | None = None  # https://www.youtube.com/watch?v=<id>, movies only
     link: str | None = None  # the configured details link, filled in
+    starts_at: str | None = None  # TV: the first air time, UTC, ISO 8601 (for the calendar file)
+    runtime: int | None = None  # TV: minutes
+    calendar: str | None = None  # path of this card's .ics under the site, e.g. cal/<hash>.ics
 
 
 ENTRY_FIELDS = tuple(f.name for f in dataclasses.fields(Entry))
@@ -166,6 +171,7 @@ def episode_from_state(raw: dict[str, Any]) -> Episode:
         tvdb=raw.get("tvdb"),
         imdb=raw.get("imdb"),
         finale=raw.get("finale"),
+        runtime=raw.get("runtime"),
     )
 
 

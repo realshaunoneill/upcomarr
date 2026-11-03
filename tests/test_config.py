@@ -92,6 +92,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg.links.tv, "https://trakt.tv/search/tvdb/{tvdb}?id_type=show")
         self.assertEqual(cfg.links.movie, "https://request.example.com/movie/{tmdb}")
         self.assertFalse(load({**BASE, "SHOW_TRAILERS": "false"}).links.trailers)
+        self.assertTrue(load(BASE).links.calendar)
+        self.assertFalse(load({**BASE, "CALENDAR_BUTTONS": "false"}).links.calendar)
 
     def test_bad_templates(self):
         for value in (

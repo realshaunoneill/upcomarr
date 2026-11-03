@@ -198,6 +198,7 @@ def _tv_entries(
             badge = AIRS
         times = [at for at, _ in items if at]
         lead = eps[0]
+        air_times = [ep.air_utc for ep in eps if ep.air_utc]
         entry = Entry(
             kind="tv",
             title=lead.series_title,
@@ -216,6 +217,8 @@ def _tv_entries(
             cinema_date=None,
             poster=posters.get(lead.poster.key) if lead.poster else None,
             highlight=highlight(eps),
+            starts_at=min(air_times).isoformat() if air_times else None,
+            runtime=lead.runtime,
             link=fill(links.tv, tmdb=lead.tmdb, tvdb=lead.tvdb, imdb=lead.imdb),
         )
         (recent if day < today else upcoming).append(entry)

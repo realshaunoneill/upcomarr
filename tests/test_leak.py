@@ -29,6 +29,7 @@ ALLOWED_KEYS = {
     # entries
     "kind", "episode_title", "count", "on_plex_count", "network", "overview", "time", "badge",
     "on_plex", "expected_date", "expected_via", "cinema_date", "poster", "highlight", "trailer", "link",
+    "starts_at", "runtime", "calendar",
 }  # fmt: skip
 
 
@@ -125,6 +126,15 @@ class LeakTest(unittest.TestCase):
         self.assertEqual(entries["Night Market"]["link"], "https://request.example.com/tv/610001")
         self.assertEqual(entries["The Lighthouse Keepers"]["highlight"], "season_finale")
         self.assertEqual(entries["Night Market"]["highlight"], "new_series")
+        # Calendar files: one per card still coming, none for anything already on Plex.
+        cal_files = sorted((self.out / "current" / "cal").glob("*.ics"))
+        with_cal = [e for e in entries.values() if e["calendar"]]
+        self.assertEqual(len(cal_files), len(with_cal))
+        self.assertTrue(all(e["calendar"] for e in entries.values() if not e["on_plex"] and e["badge"] != "released"))
+        self.assertIsNone(entries["Orchard"]["calendar"])  # released, on its way: nothing to schedule
+        self.assertTrue(all(e["calendar"] is None for e in data["recent"]))
+        ferry = (self.out / "current" / entries["The Last Ferry"]["calendar"]).read_text()
+        self.assertIn("SUMMARY:The Last Ferry on Plex", ferry)
 
     def test_private_state_is_outside_the_served_tree(self):
         run_once(self.config(), Layout(self.out), Registry(), now=fixtures.NOW)

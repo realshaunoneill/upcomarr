@@ -9,7 +9,7 @@ import hashlib
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from . import __version__, leakcheck, render, schedule
+from . import __version__, ical, leakcheck, render, schedule
 from .app import asset_version, write_site
 from .model import Episode, Links, Movie, PosterRef
 from .publish import Layout, publish, write_json
@@ -159,6 +159,7 @@ def render_demo(layout: Layout, now: datetime | None = None) -> None:
     for name, data in files.items():
         (layout.posters / name).write_bytes(data)
     sched = schedule.build(episodes, movies, now, TZ, 3, 60, 90, posters, LINKS)
+    sched = ical.attach(sched, LINKS.calendar)
     meta = render.Meta(
         title="Coming soon",
         generated_at=now,

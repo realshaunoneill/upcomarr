@@ -115,6 +115,17 @@ class RenderTest(unittest.TestCase):
         plain = render.render_index(sample(), meta())
         self.assertNotIn("card-actions", plain)
 
+    def test_calendar_button(self):
+        from upcomarr import ical
+
+        sched = ical.attach(sample(), True)
+        html = render.render_index(sched, meta())
+        self.assertRegex(
+            html, r'<a class="action action-calendar" href="cal/[0-9a-f]{20}\.ics" aria-label="Add to calendar: Show">'
+        )
+        self.assertNotRegex(html, r"action-calendar[^>]*target=")  # same origin, same tab
+        self.assertNotIn("action-calendar", render.render_index(ical.attach(sample(), False), meta()))
+
     def test_structure(self):
         html = render.render_index(sample(), meta())
         parser = Balance()

@@ -98,6 +98,7 @@ section h2 time { color: var(--muted); font-weight: 400; }
 .action:hover { border-color: var(--accent); }
 .action-trailer::before { content: "\25B6"; font-size: 0.7em; margin-right: 6px; color: var(--accent); }
 .action-details::after { content: "\2197"; margin-left: 5px; color: var(--muted); }
+.action-calendar::before { content: "+"; margin-right: 6px; color: var(--accent); font-weight: 700; }
 
 .card-overview { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
 .card-overview summary { cursor: pointer; width: fit-content; color: var(--text); opacity: 0.8; }

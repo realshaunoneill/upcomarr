@@ -63,6 +63,15 @@ def as_finale(value: Any) -> str | None:
     return value if value in FINALE_TYPES else None
 
 
+def as_runtime(*values: Any) -> int | None:
+    """The first sensible runtime in minutes. Sonarr reports 0 for episodes that have not aired."""
+    for value in values:
+        number = as_int(value)
+        if number is not None and 0 < number <= 600:
+            return number
+    return None
+
+
 def as_utc(value: Any) -> datetime | None:
     """An instant such as Sonarr's airDateUtc."""
     if not isinstance(value, str):

@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from . import __version__, leakcheck, render, schedule
+from . import __version__, ical, leakcheck, render, schedule
 from .config import Config, Source
 from .http import Client, FetchError
 from .metrics import Registry
@@ -98,6 +98,7 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
         posters=posters,
         links=cfg.links,
     )
+    sched = ical.attach(sched, cfg.links.calendar)
     meta = render.Meta(
         title=cfg.site_title,
         generated_at=now,
@@ -155,6 +156,12 @@ def write_site(target: Path, sched: schedule.Schedule, meta: render.Meta, poster
     for path in STATIC.iterdir():
         if path.is_file():
             (target / path.name).write_bytes(path.read_bytes())
+    calendars = [e for d in sched.days for e in d.entries if e.calendar]
+    if calendars:
+        (target / "cal").mkdir()
+        for entry in calendars:
+            text = ical.event(entry, meta.generated_at, meta.version)
+            (target / entry.calendar).write_text(text, "utf-8", newline="")  # keep the CRLFs
     used = {e.poster for d in sched.days for e in d.entries if e.poster}
     used |= {e.poster for e in sched.recent if e.poster}
     if used:
