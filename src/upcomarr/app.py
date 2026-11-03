@@ -127,6 +127,11 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
     ok = error is None and all(r.ok for r in results.values())
     write_json(layout.status, render.status_json(ok, meta, error))
     _record_metrics(registry, results, sched, ok, time.monotonic() - started)
+    # Its own signal, because a refused publish (a leak) still fetches every source fine: alert on
+    # how long the page has gone without a publish, not only on the sources.
+    registry.set("upcomarr_last_publish_success", "1 if the last run published the site.", 1 if error is None else 0)
+    if error is None:
+        registry.set("upcomarr_last_publish_timestamp_seconds", "When the site was last published.", now.timestamp())
     tv = sum(1 for d in sched.days for e in d.entries if e.kind == "tv")
     mv = sum(1 for d in sched.days for e in d.entries if e.kind == "movie")
     log.info(

@@ -75,8 +75,10 @@ class LeakTest(unittest.TestCase):
         return [*files, self.out / "status.json"]
 
     def test_nothing_sensitive_is_published(self):
-        ok = run_once(self.config(), Layout(self.out), Registry(), now=fixtures.NOW)
+        registry = Registry()
+        ok = run_once(self.config(), Layout(self.out), registry, now=fixtures.NOW)
         self.assertTrue(ok)
+        self.assertIn(f"upcomarr_last_publish_timestamp_seconds {fixtures.NOW.timestamp():g}", registry.render())
         forbidden = [
             "CANARY",
             fixtures.API_KEY,
@@ -127,9 +129,14 @@ class LeakTest(unittest.TestCase):
             fixtures.SERIES_IDS[0], "Leaky", overview=f"/data/tv/CANARY-series-path-{fixtures.SERIES_IDS[0]}"
         )
         self.sonarr.calendar = [fixtures.episode(show, 1, 1, "2026-11-04T20:00:00Z")]
-        ok = run_once(self.config(), Layout(self.out), Registry(), now=fixtures.NOW)
+        registry = Registry()
+        ok = run_once(self.config(), Layout(self.out), registry, now=fixtures.NOW)
         self.assertFalse(ok)
         self.assertEqual((self.out / "current" / "index.html").read_text(), before)
+        metrics = registry.render()
+        self.assertIn("upcomarr_last_publish_success 0", metrics)
+        self.assertIn('upcomarr_source_up{source="sonarr"} 1', metrics)  # the fetch itself was fine
+        self.assertNotIn("upcomarr_last_publish_timestamp_seconds", metrics)
         status = json.loads((self.out / "status.json").read_text())
         self.assertEqual((status["ok"], status["error"]), (False, "leak"))
 

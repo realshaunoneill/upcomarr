@@ -12,7 +12,7 @@
 
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.1.0
+    image: ghcr.io/realshaunoneill/upcomarr:0.1.1
     restart: unless-stopped
     environment:
       SONARR_URL: http://sonarr:8989
@@ -31,7 +31,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.0
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.1
     restart: unless-stopped
     volumes:
       - site:/srv/site:ro

@@ -54,7 +54,7 @@ Authelia, oauth2-proxy, or your reverse proxy's auth.
 # compose.yaml (the full example, with notes, is in this repository)
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.1.0
+    image: ghcr.io/realshaunoneill/upcomarr:0.1.1
     environment:
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
@@ -70,7 +70,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.0
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.1.1
     volumes: [site:/srv/site:ro]
     networks: [upcomarr-web] # put your tunnel or reverse proxy on this network too
     read_only: true
@@ -122,6 +122,8 @@ If an arr is unreachable, the page keeps that source's last good data and says h
   - `upcomarr_source_last_success_timestamp_seconds{source}`
   - `upcomarr_entries{kind}`
   - `upcomarr_last_run_success`
+  - `upcomarr_last_publish_success` and `upcomarr_last_publish_timestamp_seconds`: alert on the second, because a
+    publish refused by the leak check still fetches every source fine
   - `upcomarr_run_duration_seconds`
 - **Health:** both images have a Docker `HEALTHCHECK`.
 
