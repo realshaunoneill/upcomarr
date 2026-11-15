@@ -43,6 +43,7 @@ class Episode:
     imdb: str | None = None
     finale: str | None = None  # Sonarr's finaleType: "series", "season" or "midseason"
     runtime: int | None = None  # minutes: the episode's, else the series'
+    episode_id: int | None = None  # Sonarr's id for the episode, to match its download queue; never published
 
 
 @dataclasses.dataclass(frozen=True)
@@ -61,6 +62,15 @@ class Movie:
     tmdb: int | None = None
     imdb: str | None = None
     trailer: str | None = None  # a YouTube video id, validated in sources/
+
+
+@dataclasses.dataclass(frozen=True)
+class Queue:
+    """What the arrs are downloading right now, by their internal ids. Never published and never saved: a run that
+    cannot read a queue shows no download badges, rather than ones left over from an earlier run."""
+
+    episodes: frozenset[int] = frozenset()
+    movies: frozenset[int] = frozenset()
 
 
 # Badges, in the words the page uses.
@@ -114,6 +124,7 @@ class Entry:
     starts_at: str | None = None  # TV: the first air time, UTC, ISO 8601 (for the calendar file)
     runtime: int | None = None  # TV: minutes
     calendar: str | None = None  # path of this card's .ics under the site, e.g. cal/<hash>.ics
+    downloading: int = 0  # how many of the card's episodes (or the film) are downloading now, not yet on Plex
 
 
 ENTRY_FIELDS = tuple(f.name for f in dataclasses.fields(Entry))
@@ -172,6 +183,7 @@ def episode_from_state(raw: dict[str, Any]) -> Episode:
         imdb=raw.get("imdb"),
         finale=raw.get("finale"),
         runtime=raw.get("runtime"),
+        episode_id=raw.get("episode_id"),
     )
 
 

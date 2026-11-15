@@ -1,4 +1,4 @@
-"""One run: fetch, cache posters, render, check, publish, report."""
+"""One run: fetch, read the queues, cache posters, render, check, publish, report."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from . import __version__, ical, leakcheck, render, schedule
 from .config import Config, Source
 from .http import Client, FetchError
 from .metrics import Registry
-from .model import Episode, Movie, episode_from_state, movie_from_state, record_to_state
+from .model import Episode, Movie, Queue, episode_from_state, movie_from_state, record_to_state
 from .posters import PosterCache
 from .publish import Layout, link_or_copy, publish, write_json
 from .sources import radarr, sonarr
@@ -74,12 +74,29 @@ def fetch_source(cfg: Config, src: Source, client: Client, layout: Layout, now: 
     return SourceResult(records, True, False, now, None, sensitive)
 
 
+def fetch_queue(name: str, client: Client) -> tuple[frozenset[int] | None, set[str]]:
+    """What one arr is downloading, or None if its queue cannot be read. That only costs the badges, so it never
+    fails the run."""
+    module = sonarr if name == "sonarr" else radarr
+    try:
+        return module.fetch_queue(client)
+    except FetchError as e:
+        log.warning("%s: queue read failed (%s); no download badges for it this run", name, e.code)
+        return None, set()
+
+
 def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | None = None) -> bool:
     started = time.monotonic()
     now = now or datetime.now(UTC)
     layout.ensure()
     clients = {s.name: Client(s.url, s.api_key, cfg.request_timeout) for s in cfg.sources}
     results = {s.name: fetch_source(cfg, s, clients[s.name], layout, now) for s in cfg.sources}
+    # An arr whose calendar just failed is not asked again for its queue: it would only wait out another timeout.
+    queues = {name: fetch_queue(name, clients[name]) if r.ok else (None, set()) for name, r in results.items()}
+    queue = Queue(
+        episodes=queues.get("sonarr", (None, set()))[0] or frozenset(),
+        movies=queues.get("radarr", (None, set()))[0] or frozenset(),
+    )
 
     episodes: list[Episode] = results["sonarr"].records if "sonarr" in results else []
     movies: list[Movie] = results["radarr"].records if "radarr" in results else []
@@ -97,6 +114,7 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
         movie_days_ahead=radarr_cfg.days_ahead if radarr_cfg else 0,
         posters=posters,
         links=cfg.links,
+        queue=queue,
     )
     sched = ical.attach(sched, cfg.links.calendar)
     meta = render.Meta(
@@ -115,7 +133,7 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
     def build(target: Path) -> None:
         write_site(target, sched, meta, layout.posters)
 
-    sensitive = set().union(*(r.sensitive for r in results.values()))
+    sensitive = set().union(*(r.sensitive for r in results.values()), *(paths for _, paths in queues.values()))
     needles = leakcheck.needles_for([s.api_key for s in cfg.sources], [s.url for s in cfg.sources], sensitive)
     error = None
     try:
@@ -130,6 +148,12 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
     ok = error is None and all(r.ok for r in results.values())
     write_json(layout.status, render.status_json(ok, meta, error))
     _record_metrics(registry, results, sched, ok, time.monotonic() - started)
+    downloading = sum(1 for d in sched.days for e in d.entries if e.downloading)
+    downloading += sum(1 for e in sched.recent if e.downloading)
+    for name, (ids, _) in queues.items():
+        up = 1 if ids is not None else 0
+        registry.set("upcomarr_queue_up", "1 if the last read of this arr's download queue succeeded.", up, source=name)
+    registry.set("upcomarr_downloading_entries", "Entries on the page with a download in progress.", downloading)
     # Its own signal, because a refused publish (a leak) still fetches every source fine: alert on
     # how long the page has gone without a publish, not only on the sources.
     registry.set("upcomarr_last_publish_success", "1 if the last run published the site.", 1 if error is None else 0)
@@ -138,11 +162,12 @@ def run_once(cfg: Config, layout: Layout, registry: Registry, now: datetime | No
     tv = sum(1 for d in sched.days for e in d.entries if e.kind == "tv")
     mv = sum(1 for d in sched.days for e in d.entries if e.kind == "movie")
     log.info(
-        "run %s: %d tv and %d movie entries, %d just arrived; %s",
+        "run %s: %d tv and %d movie entries, %d just arrived, %d downloading; %s",
         "ok" if ok else "degraded",
         tv,
         mv,
         len(sched.recent),
+        downloading,
         ", ".join(f"{n} {'ok' if r.ok else r.error}" for n, r in results.items()),
     )
     return ok

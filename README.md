@@ -11,13 +11,15 @@ arrs.
 - **Movies** go on the day they are expected on Plex (the digital release, else the physical
   one), with the cinema date as context. A movie with only a cinema date shows as "In cinemas".
 - **Just arrived** lists what landed in the last few days.
+- **Downloading** marks what Sonarr or Radarr is fetching right now (see [Downloads](#downloads)).
 - **Highlights** flag premieres and finales: New series, Season premiere, Full season (a whole season on
   one day), Mid-season finale, Season finale and Series finale, from Sonarr's own data.
 - **Buttons** on each card: the film's trailer (from Radarr), and a details link to your request app or
   any site you choose (see [Detail links](#detail-links)), and **Add to calendar** on everything still
   coming (see [Calendar buttons](#calendar-buttons)).
-- **On a phone** it works as well as on a desktop, and needs no JavaScript. With JavaScript,
-  viewers can filter to TV or movies and hide what is already on Plex.
+- **On a phone** it works as well as on a desktop, and needs no JavaScript. With JavaScript, a bar at
+  the top of the screen filters to TV or movies (with a count on each) and hides what is already on Plex,
+  and it stays in reach however far down the page you are.
 
 ## The security model
 
@@ -27,14 +29,16 @@ splits the job in two instead:
 
 | Container | Holds the key? | Network | Job |
 | --- | --- | --- | --- |
-| `upcomarr` | yes | reaches the arrs; nothing connects to it (metrics are optional) | every 30 minutes, fetches the calendars and renders a static site into a volume |
+| `upcomarr` | yes | reaches the arrs; nothing connects to it (metrics are optional) | every 5 minutes, fetches the calendars and download queues and renders a static site into a volume |
 | `upcomarr-web` | **no** | an `internal` network: no route to your LAN or the internet | serves that volume, read-only, with nginx |
 
 What reaches the volume is controlled in four places:
 
 1. **An allowlist.** Records are projected to a fixed set of fields (title, episode numbers,
    air time, network, overview, release dates, a poster) before anything is rendered. Paths,
-   file details, tags, quality profiles and arr ids never leave the generator.
+   file details, tags, quality profiles and arr ids never leave the generator. From the download
+   queues it reads only which episode or film each item is for and its state: release names,
+   indexers, download clients and progress are never read at all.
 2. **Posters are cached by the generator**, from the arr's own API, and named by a hash of
    their bytes. Viewers' browsers fetch nothing from any other origin. The page's
    Content-Security-Policy is `default-src 'none'` with `'self'` for images, styles and
@@ -59,7 +63,7 @@ Authelia, oauth2-proxy, or your reverse proxy's auth.
 # compose.yaml (the full example, with notes, is in this repository)
 services:
   upcomarr:
-    image: ghcr.io/realshaunoneill/upcomarr:0.3.0
+    image: ghcr.io/realshaunoneill/upcomarr:0.4.0
     environment:
       SONARR_URL: http://sonarr:8989
       SONARR_API_KEY_FILE: /run/secrets/sonarr_api_key
@@ -75,7 +79,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   upcomarr-web:
-    image: ghcr.io/realshaunoneill/upcomarr-web:0.3.0
+    image: ghcr.io/realshaunoneill/upcomarr-web:0.4.0
     volumes: [site:/srv/site:ro]
     networks: [upcomarr-web] # put your tunnel or reverse proxy on this network too
     read_only: true
@@ -112,7 +116,7 @@ set, never their values.
 | `SONARR_TAGS`, `RADARR_TAGS` | | Comma-separated tag labels; only items with one of them are shown. An unknown label fails the source rather than showing everything. |
 | `INCLUDE_UNMONITORED` | `false` | |
 | `SITE_TITLE` | `Coming soon` | |
-| `INTERVAL_SECONDS` | `1800` | It also refreshes just after local midnight, so "Today" is right. |
+| `INTERVAL_SECONDS` | `300` | It also refreshes just after local midnight, so "Today" is right. Much longer, and most downloads finish between two refreshes, so the Downloading badge is rarely seen. |
 | `METRICS_PORT` | `0` (off) | Prometheus metrics on `/metrics`. |
 | `REQUEST_TIMEOUT_SECONDS` | `20` | A total limit per request. |
 | `SEERR_URL` | | Your request app's address as viewers see it, e.g. `https://request.example.com`. Adds a details button that opens each title in Seerr, Overseerr or Jellyseerr. |
@@ -166,6 +170,23 @@ not fetch the file again. The trade-off is that an imported event does not follo
 A *subscribed* calendar would keep up, but calendar apps fetch subscriptions themselves, without the viewer's
 login, so it would need an unauthenticated (if unguessable) URL. upcomarr does not offer one yet.
 
+### Downloads
+
+Each run also reads Sonarr's and Radarr's download queues (`/api/v3/queue`, with the same API keys). A card
+gets a **Downloading** badge, or "3 of 8 downloading" for a season, while something on it is on its way:
+queued or downloading in the client, or finished and being imported. Paused, delayed, failed and blocked
+items are left out, because they may never arrive, and so is an upgrade of a file already on Plex.
+
+- **An episode that aired in the last `DAYS_BEHIND` days** and is not on Plex yet normally drops off the page.
+  While it is downloading, it is shown on Today instead, with the day it aired.
+- **Only what is already in the calendar window gets a badge.** An old series or film fetched from the
+  back catalogue is not listed.
+- **The badge is only as fresh as the page,** so it says "Downloading" and nothing more: no percentage or
+  time left, which would be out of date by the next refresh.
+- **A queue that cannot be read costs only the badges.** The page is published as usual, and
+  `upcomarr_queue_up` says which arr it was. Nothing is remembered between runs, so a badge is never
+  left over from an earlier one.
+
 ## Monitoring
 
 - **`/_status.json`** on the web container: `ok`, plus per-source `ok`, `stale` and
@@ -174,6 +195,7 @@ login, so it would need an unauthenticated (if unguessable) URL. upcomarr does n
   - `upcomarr_source_up{source}`
   - `upcomarr_source_last_success_timestamp_seconds{source}`
   - `upcomarr_entries{kind}`
+  - `upcomarr_queue_up{source}` and `upcomarr_downloading_entries`
   - `upcomarr_last_run_success`
   - `upcomarr_last_publish_success` and `upcomarr_last_publish_timestamp_seconds`: alert on the second, because a
     publish refused by the leak check still fetches every source fine

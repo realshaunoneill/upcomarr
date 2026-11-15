@@ -13,6 +13,9 @@ Rules worth knowing:
   episode numbers; specials never do.
 - Things already on Plex are not "coming". They appear only in the "Just arrived" strip,
   and only if they arrived in the last DAYS_BEHIND days.
+- An entry counts what of it is downloading now, from the arrs' queues. Only episodes and films not yet on
+  Plex count, so an upgrade of a file already there is not news. Episodes that aired in the last DAYS_BEHIND
+  days, are not on Plex and are downloading go on today, as "On its way to Plex", like a film released this week.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from .model import (
     Episode,
     Links,
     Movie,
+    Queue,
 )
 
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -171,6 +175,7 @@ def _tv_entries(
     days_ahead: int,
     posters: Mapping[str, str],
     links: Links,
+    queued: frozenset[int],
 ) -> tuple[list[Entry], list[Entry]]:
     groups: dict[tuple[int, date], list[tuple[str | None, Episode]]] = defaultdict(list)
     for ep in episodes:
@@ -188,15 +193,20 @@ def _tv_entries(
         eps = [ep for _, ep in items]
         count = len(eps)
         on_plex = sum(ep.has_file for ep in eps)
-        if day < today and on_plex == 0:
-            continue  # aired, but not here yet: not news either way
+        downloading = sum(1 for ep in eps if not ep.has_file and ep.episode_id in queued)
+        if day < today and on_plex == 0 and not downloading:
+            continue  # aired, but not here yet and not on its way: not news either way
+        times = [at for at, _ in items if at]
+        shown_day, shown_time = day, (min(times) if times else None)
         if on_plex == count:
             badge = ON_PLEX
         elif on_plex:
             badge = PARTIAL
+        elif day < today:
+            # Aired, and downloading now. It goes on today without its air time, which would read as tonight's.
+            badge, shown_day, shown_time = RELEASED, today, None
         else:
             badge = AIRS
-        times = [at for at, _ in items if at]
         lead = eps[0]
         air_times = [ep.air_utc for ep in eps if ep.air_utc]
         entry = Entry(
@@ -208,11 +218,11 @@ def _tv_entries(
             on_plex_count=on_plex,
             network=lead.network,
             overview=trim(lead.series_overview),
-            date=day.isoformat(),
-            time=min(times) if times else None,
+            date=shown_day.isoformat(),
+            time=shown_time,
             badge=badge,
             on_plex=on_plex == count,
-            expected_date=None,
+            expected_date=day.isoformat() if badge == RELEASED else None,  # for TV, the day it aired
             expected_via=None,
             cinema_date=None,
             poster=posters.get(lead.poster.key) if lead.poster else None,
@@ -220,8 +230,9 @@ def _tv_entries(
             starts_at=min(air_times).isoformat() if air_times else None,
             runtime=lead.runtime,
             link=fill(links.tv, tmdb=lead.tmdb, tvdb=lead.tvdb, imdb=lead.imdb),
+            downloading=downloading,
         )
-        (recent if day < today else upcoming).append(entry)
+        (recent if shown_day < today else upcoming).append(entry)
     return upcoming, recent
 
 
@@ -252,6 +263,7 @@ def _movie_entries(
     days_ahead: int,
     posters: Mapping[str, str],
     links: Links,
+    queued: frozenset[int],
 ) -> tuple[list[Entry], list[Entry]]:
     upcoming: list[Entry] = []
     recent: list[Entry] = []
@@ -300,6 +312,7 @@ def _movie_entries(
                 on_plex=False,
                 expected_date=expected.isoformat() if expected else None,
                 expected_via=via,
+                downloading=1 if movie.movie_id in queued else 0,
             )
         )
     return upcoming, recent
@@ -319,11 +332,13 @@ def build(
     movie_days_ahead: int,
     posters: Mapping[str, str],
     links: Links | None = None,
+    queue: Queue | None = None,
 ) -> Schedule:
     links = links or Links()
+    queue = queue or Queue()
     today = now.astimezone(tz).date()
-    tv_up, tv_recent = _tv_entries(episodes, tz, today, days_behind, tv_days_ahead, posters, links)
-    mv_up, mv_recent = _movie_entries(movies, today, days_behind, movie_days_ahead, posters, links)
+    tv_up, tv_recent = _tv_entries(episodes, tz, today, days_behind, tv_days_ahead, posters, links, queue.episodes)
+    mv_up, mv_recent = _movie_entries(movies, today, days_behind, movie_days_ahead, posters, links, queue.movies)
 
     by_day: dict[date, list[Entry]] = defaultdict(list)
     for entry in tv_up + mv_up:

@@ -1,4 +1,5 @@
-"""Upcoming episodes from Sonarr's calendar (v3 API; Sonarr v4 and v5 both serve it)."""
+"""Upcoming episodes from Sonarr's calendar, and what its queue is downloading (v3 API; Sonarr v4 and v5 both
+serve it)."""
 
 from __future__ import annotations
 
@@ -20,11 +21,17 @@ from . import (
     as_utc,
     collect_sensitive,
     matches_tags,
+    queue_ids,
 )
 from . import poster_ref as _poster_ref
 
 API = "v3"
 NAME = "sonarr"
+
+
+def fetch_queue(client: Client) -> tuple[frozenset[int], set[str]]:
+    """Episode ids downloading now. The v3 queue has one record per episode, season packs included."""
+    return queue_ids(client, "episodeId")
 
 
 def fetch(
@@ -94,4 +101,5 @@ def project(item: Any, include_unmonitored: bool, wanted: frozenset[int] | None)
         imdb=as_imdb(series.get("imdbId")),
         finale=as_finale(item.get("finaleType")),
         runtime=as_runtime(item.get("runtime"), series.get("runtime")),
+        episode_id=as_int(item.get("id")),
     )

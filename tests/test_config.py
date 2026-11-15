@@ -17,6 +17,7 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(cfg.sources[0].days_ahead, 60)
         self.assertEqual(cfg.tz_name, "UTC")
         self.assertEqual(cfg.metrics_port, 0)
+        self.assertEqual(cfg.interval_seconds, 300)  # often enough for the download badges to mean something
         self.assertFalse(cfg.include_unmonitored)
 
     def test_needs_a_source(self):

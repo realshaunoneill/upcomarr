@@ -16,10 +16,15 @@ OTHER_KEY = "CANARYKEYfedcba9876543210fedcba98"
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + bytes(range(64)) + b"\xff\xd9"
 PNG = b"\x89PNG\r\n\x1a\n" + bytes(64)
 
-# Internal ids: must never appear in published output.
-SERIES_IDS = (734891, 734892, 734893)
+# Internal ids: must never appear in published output. Episode ids come from episode_id().
+SERIES_IDS = (734891, 734892, 734893, 734894)
 MOVIE_IDS = (881201, 881202, 881203, 881204, 881205)
 INTERNAL_IDS = SERIES_IDS + MOVIE_IDS
+
+
+def episode_id(show: dict[str, Any], number: int) -> int:
+    """Distinct per series and episode number, and unlike any other id here."""
+    return 990000 + (show["id"] % 100) * 100 + number
 
 
 def canary(path: str) -> str:
@@ -93,7 +98,7 @@ def episode(
     finale: str | None = None,
 ) -> dict[str, Any]:
     return {
-        "id": 990000 + number,
+        "id": episode_id(show, number),
         "seriesId": show["id"],
         "series": show,
         "tvdbId": 5551000 + number,
@@ -179,18 +184,72 @@ def movie(
     }
 
 
+def shows() -> tuple[dict[str, Any], ...]:
+    return (
+        series(SERIES_IDS[0], "The Lighthouse Keepers"),
+        series(SERIES_IDS[1], "Night Market", network="Channel 9"),
+        series(SERIES_IDS[2], "Paper Moons", network=None),
+        series(SERIES_IDS[3], "Harbour Lights"),
+    )
+
+
 def sonarr_calendar() -> list[dict[str, Any]]:
-    """Three shows around NOW (2026-11-03 12:00 UTC)."""
-    keepers = series(SERIES_IDS[0], "The Lighthouse Keepers")
-    market = series(SERIES_IDS[1], "Night Market", network="Channel 9")
-    moons = series(SERIES_IDS[2], "Paper Moons", network=None)
+    """Four shows around NOW (2026-11-03 12:00 UTC)."""
+    keepers, market, moons, harbour = shows()
     out = [episode(keepers, 2, 5, "2026-11-03T21:00:00Z", finale="season")]
     out += [episode(market, 1, n, "2026-11-05T20:00:00Z") for n in range(1, 9)]
     out += [
         episode(moons, 4, 3, "2026-11-01T20:30:00Z", has_file=True),  # just arrived
         episode(moons, 4, 4, "2026-11-08T20:30:00Z", title="TBA"),
+        episode(harbour, 3, 1, "2026-11-01T21:00:00Z"),  # aired, not here, not downloading: not shown
+        episode(harbour, 3, 2, "2026-11-02T21:00:00Z"),  # aired, downloading now: on today
     ]
     return out
+
+
+def queue_record(id_key: str, item_id: int | None, status: str, state: str, health: str = "ok") -> dict[str, Any]:
+    """One record of an arr's /api/v3/queue, every field the code must not read full of canaries."""
+    return {
+        "id": 70000 + (item_id or 0) % 1000,
+        id_key: item_id,
+        "status": status,
+        "trackedDownloadState": state,
+        "trackedDownloadStatus": health,
+        "title": canary("queue.title.Some.Release.1080p.WEB-GROUP"),
+        "size": 2_000_000_000,
+        "sizeleft": 500_000_000,
+        "timeleft": "00:04:10",
+        "estimatedCompletionTime": "2026-11-03T12:04:10Z",
+        "downloadId": canary("queue.downloadId"),
+        "downloadClient": canary("queue.downloadClient"),
+        "indexer": canary("queue.indexer"),
+        "protocol": "usenet",
+        "outputPath": f"/data/usenet/CANARY-output-{item_id}",
+        "errorMessage": canary("queue.errorMessage"),
+        "statusMessages": [{"title": canary("queue.statusMessages.title"), "messages": [canary("queue.message")]}],
+        "quality": {"quality": {"name": canary("queue.quality")}},
+    }
+
+
+def sonarr_queue() -> list[dict[str, Any]]:
+    keepers, market, moons, harbour = shows()
+    return [
+        queue_record("episodeId", episode_id(harbour, 2), "downloading", "downloading"),
+        queue_record("episodeId", episode_id(market, 1), "queued", "downloading"),  # out early
+        queue_record("episodeId", episode_id(market, 2), "completed", "importPending"),
+        queue_record("episodeId", episode_id(moons, 3), "downloading", "downloading"),  # an upgrade: already on Plex
+        queue_record("episodeId", episode_id(keepers, 5), "failed", "failedPending", "error"),
+        queue_record("episodeId", episode_id(harbour, 1), "paused", "downloading"),
+        queue_record("episodeId", None, "downloading", "downloading"),  # a release Sonarr could not match
+    ]
+
+
+def radarr_queue() -> list[dict[str, Any]]:
+    return [
+        queue_record("movieId", MOVIE_IDS[2], "completed", "importing"),  # Orchard: released, on its way
+        queue_record("movieId", MOVIE_IDS[3], "downloading", "downloading"),  # Small Hours: an upgrade
+        queue_record("movieId", MOVIE_IDS[0], "completed", "importBlocked", "warning"),  # needs a person
+    ]
 
 
 def radarr_calendar() -> list[dict[str, Any]]:

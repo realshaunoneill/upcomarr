@@ -12,6 +12,7 @@
   --on-plex: #5fd08c;
   --cinema: #c79bff;
   --released: #4fd1c5;
+  --downloading: #ff8f6b;
   --radius: 12px;
   --gap: 12px;
   color-scheme: dark;
@@ -29,20 +30,35 @@ a { color: var(--accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 [hidden] { display: none !important; }
 
-.site-header, main, .site-footer { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
-.site-header { padding-top: 28px; padding-bottom: 8px; }
+.site-header, main, .site-footer, .filters-inner { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+.site-header { padding-top: 28px; }
 .site-header h1 { margin: 0; font-size: clamp(1.6rem, 5vw, 2.2rem); letter-spacing: -0.01em; }
-.tagline { margin: 4px 0 16px; color: var(--muted); }
+.tagline { margin: 4px 0 8px; color: var(--muted); }
 
-.filters { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 8px; }
+/* The filter bar stays at the top of the screen; the day headings stick just under it (app.js
+   measures it into --filters-height, since it wraps to two rows on a narrow screen). */
+.filters {
+  position: sticky; top: 0; z-index: 2;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.filters-inner { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding-top: 8px; padding-bottom: 8px; }
 .filter-group { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
 .filter-group button {
   font: inherit; font-size: 0.95rem; color: var(--muted); background: none; border: 0;
-  padding: 6px 14px; border-radius: 999px; cursor: pointer; min-height: 36px;
+  padding: 6px 14px; border-radius: 999px; cursor: pointer; min-height: 40px;
+  display: inline-flex; align-items: center; gap: 6px; touch-action: manipulation;
 }
 .filter-group button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
-.filter-toggle { color: var(--muted); font-size: 0.95rem; display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
-.filter-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.count { font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--muted); opacity: 0.85; }
+.count:empty { display: none; }
+.filter-toggle {
+  color: var(--muted); font-size: 0.95rem; display: inline-flex; gap: 8px; align-items: center; cursor: pointer;
+  min-height: 40px; touch-action: manipulation;
+}
+.filter-toggle input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.narrow-only { display: none; }
 
 body[data-filter="tv"] .card[data-kind="movie"],
 body[data-filter="movie"] .card[data-kind="tv"],
@@ -55,7 +71,7 @@ body[data-hide-on-plex] .card[data-on-plex="true"] { display: none; }
 
 section { margin: 22px 0 8px; }
 section h2 {
-  position: sticky; top: 0; z-index: 1; margin: 0 0 10px; padding: 10px 0 8px;
+  position: sticky; top: var(--filters-height, 0px); z-index: 1; margin: 0 0 10px; padding: 10px 0 8px;
   background: linear-gradient(var(--bg) 75%, transparent);
   font-size: 1.05rem; font-weight: 600; display: flex; gap: 10px; align-items: baseline;
 }
@@ -88,6 +104,10 @@ section h2 time { color: var(--muted); font-weight: 400; }
 .badge-in_cinemas { color: var(--cinema); }
 .badge-released { color: var(--released); }
 .badge-highlight { color: var(--text); border-color: var(--line); background: var(--surface-2); }
+.badge-downloading { color: var(--downloading); display: inline-flex; align-items: center; gap: 6px; }
+.badge-downloading::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none;
+}
 
 .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
 .action {
@@ -117,9 +137,29 @@ section h2 time { color: var(--muted); font-weight: 400; }
 @media (min-width: 700px) {
   .poster { width: 100px; height: 150px; }
 }
+/* Phones: one row of filters, and card buttons that fit side by side. */
+@media (max-width: 520px) {
+  .site-header { padding-top: 20px; }
+  .filters-inner { gap: 6px 12px; padding-top: 6px; padding-bottom: 6px; }
+  .filter-group button { padding: 6px 11px; }
+  .filter-toggle { font-size: 0.9rem; }
+  .wide-only { display: none; }
+  .narrow-only { display: inline; }
+  .card { gap: 12px; }
+  .card-actions { gap: 6px; }
+  .action { padding: 4px 10px; font-size: 0.85rem; min-height: 36px; }
+}
+/* Small Android phones (360px): still one row of filters. */
+@media (max-width: 400px) {
+  .site-header, main, .site-footer, .filters-inner { padding-left: 12px; padding-right: 12px; }
+  .filters-inner { gap: 6px 10px; }
+  .filter-group button { padding: 6px 9px; gap: 4px; }
+}
 @media (prefers-reduced-motion: no-preference) {
   .filter-group button { transition: background-color 0.15s, color 0.15s; }
+  .badge-downloading::before { animation: pulse 1.6s ease-in-out infinite; }
 }
+@keyframes pulse { 50% { opacity: 0.25; } }
 @media (forced-colors: active) {
   .badge { border: 1px solid; }
 }

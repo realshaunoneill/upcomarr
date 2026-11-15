@@ -33,8 +33,12 @@ def shift(value: Any, days: int) -> Any:
 
 def main() -> None:
     days = (datetime.now(UTC).date() - fixtures.NOW.date()).days
-    sonarr = FakeArr(shift(fixtures.sonarr_calendar(), days), fixtures.API_KEY, "Sonarr", "0.0.0.0", 8989)
-    radarr = FakeArr(shift(fixtures.radarr_calendar(), days), fixtures.OTHER_KEY, "Radarr", "0.0.0.0", 7878)
+    sonarr = FakeArr(
+        shift(fixtures.sonarr_calendar(), days), fixtures.API_KEY, "Sonarr", "0.0.0.0", 8989, fixtures.sonarr_queue()
+    )
+    radarr = FakeArr(
+        shift(fixtures.radarr_calendar(), days), fixtures.OTHER_KEY, "Radarr", "0.0.0.0", 7878, fixtures.radarr_queue()
+    )
     sonarr.__enter__()
     radarr.__enter__()
     print(f"fake arrs up, fixtures shifted {days} days", flush=True)

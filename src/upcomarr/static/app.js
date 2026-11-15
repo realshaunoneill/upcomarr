@@ -2,7 +2,8 @@
 // - relabels days ("Today", "Tomorrow") against the viewer's clock, and hides days that have
 //   passed since the page was built;
 // - shows "Updated 12 minutes ago" instead of an absolute time;
-// - the TV/Movies filter and "hide what is already on Plex", remembered per browser.
+// - the TV/Movies filter and "hide what is already on Plex", remembered per browser, in a bar that
+//   stays at the top of the screen, with a count on each button.
 (() => {
   "use strict";
   const root = document.documentElement;
@@ -65,34 +66,62 @@
   if (!nav) return;
   const buttons = [...nav.querySelectorAll("button[data-filter]")];
   const hideOnPlex = nav.querySelector("input[data-hide-on-plex]");
+  const sections = [...document.querySelectorAll("section.day, section.recent")].filter((s) => s.dataset.past !== "true");
+  const filteredEmpty = document.querySelector("[data-filtered-empty]");
   const current = () => body.dataset.filter || "all";
-  const shown = (card) =>
-    (current() === "all" || card.dataset.kind === current()) && !(hideOnPlex.checked && card.dataset.onPlex === "true");
+  const kindOk = (card, kind) => kind === "all" || card.dataset.kind === kind;
+  const plexOk = (card) => !(hideOnPlex.checked && card.dataset.onPlex === "true");
 
   const apply = () => {
-    for (const section of document.querySelectorAll("section.day, section.recent")) {
-      if (section.dataset.past === "true") continue;
-      section.hidden = ![...section.querySelectorAll(".card")].some(shown);
+    const counts = { all: 0, tv: 0, movie: 0 };
+    let any = false;
+    for (const section of sections) {
+      let visible = false;
+      for (const card of section.querySelectorAll(".card")) {
+        if (!plexOk(card)) continue;
+        counts.all += 1;
+        counts[card.dataset.kind] = (counts[card.dataset.kind] || 0) + 1;
+        if (kindOk(card, current())) visible = true;
+      }
+      section.hidden = !visible;
+      any ||= visible;
     }
+    for (const el of nav.querySelectorAll("[data-count]")) el.textContent = String(counts[el.dataset.count] ?? 0);
+    if (filteredEmpty) filteredEmpty.hidden = any;
   };
-  const setFilter = (value) => {
+  // Changing the filter while scrolled down would leave the viewer somewhere arbitrary in a
+  // shorter list, so go back to its start, just under the bar.
+  const header = document.querySelector(".site-header");
+  const toListStart = () => {
+    const top = header ? header.offsetTop + header.offsetHeight : 0;
+    if (window.scrollY > top) window.scrollTo({ top });
+  };
+  const setFilter = (value, user = false) => {
     body.dataset.filter = value;
     for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.filter === value));
     store?.setItem("upcomarr.filter", value);
     apply();
+    if (user) toListStart();
   };
-  const setHide = (on) => {
+  const setHide = (on, user = false) => {
     hideOnPlex.checked = on;
     body.toggleAttribute("data-hide-on-plex", on);
     store?.setItem("upcomarr.hideOnPlex", on ? "1" : "0");
     apply();
+    if (user) toListStart();
   };
 
-  for (const button of buttons) button.addEventListener("click", () => setFilter(button.dataset.filter));
-  hideOnPlex.addEventListener("change", () => setHide(hideOnPlex.checked));
+  for (const button of buttons) button.addEventListener("click", () => setFilter(button.dataset.filter, true));
+  hideOnPlex.addEventListener("change", () => setHide(hideOnPlex.checked, true));
 
   const saved = store?.getItem("upcomarr.filter");
   setFilter(["all", "tv", "movie"].includes(saved) ? saved : "all");
   setHide(store?.getItem("upcomarr.hideOnPlex") === "1");
   nav.hidden = false;
+
+  // Day headings stick just under the bar, whose height changes when it wraps on a narrow screen.
+  const measure = () => root.style.setProperty("--filters-height", `${nav.offsetHeight}px`);
+  measure();
+  if ("ResizeObserver" in window) new ResizeObserver(measure).observe(nav);
+  else window.addEventListener("resize", measure);
 })();
