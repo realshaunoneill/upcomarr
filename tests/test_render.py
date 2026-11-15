@@ -179,6 +179,15 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(html.count("data-downloading"), 2)
         self.assertNotIn("badge-downloading", render.render_index(sample(), meta()))
 
+    def test_expected_film_says_when(self):
+        # The Beast on 2026-11-15: in cinemas since 8 Oct, digital release on 17 Nov.
+        film = Movie(3, "Beast", 2026, None, None, date(2026, 10, 8), date(2026, 11, 17), None, False, None, None)
+        sched = schedule.build([], [film], NOW, ZoneInfo("Europe/Dublin"), 3, 60, 90, {})
+        html = render.render_index(sched, meta())
+        self.assertIn('<span class="badge badge-expected">Expected on Plex 17 Nov</span>', html)
+        self.assertIn('<p class="card-note">Cinema release 8 Oct</p>', html)
+        self.assertNotIn(">Expected on Plex<", html)
+
     def test_filter_bar(self):
         html = render.render_index(sample(), meta())
         header = html[html.index("<header") : html.index("</header>")]

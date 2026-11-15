@@ -79,9 +79,12 @@ def _badge(entry: Entry) -> tuple[str, str | None]:
     if entry.badge == AIRS:
         return ("New episodes" if entry.count > 1 else "New episode"), None
     if entry.badge == EXPECTED:
+        # The date goes in the badge: without it, "Expected on Plex" reads as "should be there now". The cinema date
+        # is usually weeks past, so it is worded without a tense.
+        when = short_date(date.fromisoformat(entry.expected_date or entry.date))
         cinema = entry.cinema_date
-        note = f"In cinemas {short_date(date.fromisoformat(cinema))}" if cinema else None
-        return "Expected on Plex", note
+        note = f"Cinema release {short_date(date.fromisoformat(cinema))}" if cinema else None
+        return f"Expected on Plex {when}", note
     if entry.badge == RELEASED:
         when = short_date(date.fromisoformat(entry.expected_date)) if entry.expected_date else None
         verb = "Aired" if entry.kind == "tv" else "Released"
