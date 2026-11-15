@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 from . import __version__, ical, leakcheck, render, schedule
 from .app import asset_version, write_site
-from .model import Episode, Links, Movie, PosterRef
+from .model import Episode, Links, Movie, PosterRef, Queue
 from .publish import Layout, publish, write_json
 
 TZ = ZoneInfo("Europe/Dublin")
@@ -45,10 +45,14 @@ SHOWS = (
         [(3, None, 1, 1, 6, False)],
     ),
     ("Harbour Lights", "Northlight", "A coastal police drama.", [(0, "22:00", 3, 1, 2, False)]),
+    ("Fog Bank", "Channel 9", "A late-night panel show that never quite agrees.", [(-1, "22:30", 7, 12, 12, False)]),
 )
 
 # Sonarr's finaleType for a few episodes, so the demo shows the highlights.
 FINALES = {("The Lighthouse Keepers", 2, 5): "season", ("Night Market", 1, 8): "season"}
+# What the demo's download queues hold: an episode that aired yesterday, and a film released this week.
+DOWNLOADING_EPISODES = {("Fog Bank", 7, 12)}
+DOWNLOADING_MOVIES = {"Orchard"}
 # Made-up trailer ids: the links go to YouTube but nowhere real.
 TRAILERS = {"The Last Ferry": "demoTrailer1", "Signal Fires": "demoTrailer2", "Copper Coast": "demoTrailer3"}
 LINKS = Links(movie="https://request.example.com/movie/{tmdb}", tv="https://request.example.com/tv/{tmdb}")
@@ -121,6 +125,7 @@ def sample(now: datetime) -> tuple[list[Episode], list[Movie], dict[str, str], d
                         ref,
                         tmdb=900_000 + i,
                         finale=FINALES.get((title, season, number)),
+                        episode_id=len(episodes) + 1,
                     )
                 )
     for j, (title, year, studio, overview, cinema, digital, physical, added) in enumerate(MOVIES):
@@ -152,13 +157,24 @@ def sample(now: datetime) -> tuple[list[Episode], list[Movie], dict[str, str], d
     return episodes, movies, posters, files
 
 
+def queue(episodes: list[Episode], movies: list[Movie]) -> Queue:
+    return Queue(
+        episodes=frozenset(
+            e.episode_id
+            for e in episodes
+            if (e.series_title, e.season, e.episode) in DOWNLOADING_EPISODES and e.episode_id is not None
+        ),
+        movies=frozenset(m.movie_id for m in movies if m.title in DOWNLOADING_MOVIES),
+    )
+
+
 def render_demo(layout: Layout, now: datetime | None = None) -> None:
     now = now or datetime.now(UTC)
     layout.ensure()
     episodes, movies, posters, files = sample(now)
     for name, data in files.items():
         (layout.posters / name).write_bytes(data)
-    sched = schedule.build(episodes, movies, now, TZ, 3, 60, 90, posters, LINKS)
+    sched = schedule.build(episodes, movies, now, TZ, 3, 60, 90, posters, LINKS, queue(episodes, movies))
     sched = ical.attach(sched, LINKS.calendar)
     meta = render.Meta(
         title="Coming soon",

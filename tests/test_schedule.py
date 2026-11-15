@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from upcomarr import schedule
-from upcomarr.model import EXPECTED, IN_CINEMAS, ON_PLEX, PARTIAL, RELEASED, Episode, Links, Movie, PosterRef
+from upcomarr.model import EXPECTED, IN_CINEMAS, ON_PLEX, PARTIAL, RELEASED, Episode, Links, Movie, PosterRef, Queue
 
 DUBLIN = ZoneInfo("Europe/Dublin")
 LA = ZoneInfo("America/Los_Angeles")
@@ -21,6 +21,7 @@ def ep(
     ep_title=None,
     finale=None,
     tmdb=None,
+    episode_id=None,
 ):
     return Episode(
         series_id,
@@ -36,6 +37,7 @@ def ep(
         PosterRef("sonarr", series_id, "v1"),
         tmdb=tmdb,
         finale=finale,
+        episode_id=episode_id,
     )
 
 
@@ -198,6 +200,55 @@ class MovieTest(unittest.TestCase):
             {},
         )
         self.assertEqual([e.title for e in sched.days[0].entries], ["Early", "Late", "A film"])
+
+
+class DownloadingTest(unittest.TestCase):
+    def build(self, episodes=(), movies=(), queue=None):
+        return schedule.build(list(episodes), list(movies), NOW, DUBLIN, 3, 60, 90, {}, None, queue)
+
+    def test_counts_only_what_is_not_on_plex(self):
+        eps = [ep(2, n, utc(2026, 11, 3, 6), has_file=n == 1, episode_id=100 + n) for n in range(1, 5)]
+        sched = self.build(eps, queue=Queue(episodes=frozenset({101, 102, 103})))
+        (entry,) = sched.days[0].entries
+        self.assertEqual((entry.badge, entry.on_plex_count, entry.downloading), (PARTIAL, 1, 2))  # 101 is an upgrade
+
+    def test_aired_and_downloading_goes_on_today(self):
+        eps = [
+            ep(1, 4, utc(2026, 11, 2, 21), episode_id=4, finale="season"),
+            ep(1, 3, utc(2026, 11, 1, 21), episode_id=3, series_id=2, title="Not coming"),
+        ]
+        sched = self.build(eps, queue=Queue(episodes=frozenset({4})))
+        (day,) = sched.days
+        (entry,) = day.entries
+        self.assertEqual(day.heading, "Today")
+        self.assertEqual(
+            (entry.title, entry.badge, entry.date, entry.time, entry.expected_date, entry.downloading),
+            ("Show", RELEASED, "2026-11-03", None, "2026-11-02", 1),
+        )
+        self.assertEqual(entry.highlight, "season_finale")
+        self.assertEqual(sched.recent, ())
+
+    def test_aired_partly_here_stays_in_just_arrived(self):
+        eps = [ep(1, n, utc(2026, 11, 2, 21), has_file=n == 1, episode_id=n) for n in (1, 2)]
+        sched = self.build(eps, queue=Queue(episodes=frozenset({2})))
+        self.assertEqual(sched.days, ())
+        (entry,) = sched.recent
+        self.assertEqual((entry.badge, entry.downloading), (PARTIAL, 1))
+
+    def test_no_queue_no_badges(self):
+        sched = self.build([ep(1, 1, utc(2026, 11, 4, 20), episode_id=1)], [mv(digital=date(2026, 11, 2))])
+        self.assertTrue(all(e.downloading == 0 for d in sched.days for e in d.entries))
+        self.assertEqual(self.build([ep(1, 1, utc(2026, 11, 2, 20), episode_id=1)]).days, ())
+
+    def test_movies(self):
+        movies = [
+            mv(movie_id=1, title="Released", digital=date(2026, 11, 2)),
+            mv(movie_id=2, title="Upgrade", digital=date(2026, 10, 1), has_file=True, file_added=date(2026, 11, 2)),
+            mv(movie_id=3, title="Later", digital=date(2026, 11, 20)),
+        ]
+        sched = self.build(movies=movies, queue=Queue(movies=frozenset({1, 2})))
+        by_title = {e.title: e for d in sched.days for e in d.entries} | {e.title: e for e in sched.recent}
+        self.assertEqual({t: e.downloading for t, e in by_title.items()}, {"Released": 1, "Upgrade": 0, "Later": 0})
 
 
 class HighlightTest(unittest.TestCase):

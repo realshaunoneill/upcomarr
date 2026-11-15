@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
 from upcomarr import render, schedule
-from upcomarr.model import Episode, Links, Movie, PosterRef
+from upcomarr.model import Episode, Links, Movie, PosterRef, Queue
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 VOID = {"meta", "link", "img", "input", "br", "hr"}
@@ -150,7 +150,45 @@ class RenderTest(unittest.TestCase):
 
     def test_empty(self):
         empty = schedule.Schedule(date(2026, 11, 3), (), ())
-        self.assertIn("Nothing is scheduled yet", render.render_index(empty, meta()))
+        html = render.render_index(empty, meta())
+        self.assertIn("Nothing is scheduled yet", html)
+        self.assertNotIn("data-filtered-empty", html)
+
+    def test_downloading_badges(self):
+        aired = Episode(3, "Aired", None, None, 1, 4, None, NOW - timedelta(hours=20), None, False, None, episode_id=4)
+        drop = [
+            Episode(4, "Drop", None, None, 2, n, None, NOW + timedelta(hours=8), None, False, None, episode_id=10 + n)
+            for n in range(1, 9)
+        ]
+        sched = schedule.build(
+            [aired, *drop],
+            [],
+            NOW,
+            ZoneInfo("Europe/Dublin"),
+            3,
+            60,
+            90,
+            {},
+            queue=Queue(episodes=frozenset({4, 11, 12})),
+        )
+        html = render.render_index(sched, meta())
+        self.assertNotIn("On its way to Plex", html)  # the Downloading badge says it
+        self.assertIn('<p class="badges"><span class="badge badge-downloading">Downloading</span></p>', html)
+        self.assertIn('<span class="badge badge-downloading">2 of 8 downloading</span>', html)
+        self.assertIn('<p class="card-note">Aired 2 Nov</p>', html)
+        self.assertEqual(html.count("data-downloading"), 2)
+        self.assertNotIn("badge-downloading", render.render_index(sample(), meta()))
+
+    def test_filter_bar(self):
+        html = render.render_index(sample(), meta())
+        header = html[html.index("<header") : html.index("</header>")]
+        self.assertNotIn("filters", header)  # outside the header, so it can stick to the top of the page
+        nav = html[html.index('<nav class="filters"') : html.index("</nav>")]
+        self.assertIn(" hidden>", nav[: nav.index(">") + 1])  # app.js shows it; without it the page is all there
+        for key in ("all", "tv", "movie"):
+            self.assertIn(f'data-filter="{key}"', nav)
+            self.assertIn(f'data-count="{key}"', nav)
+        self.assertIn('<p class="empty" data-filtered-empty hidden>', html)
 
     def test_json_has_only_public_fields(self):
         data = render.upcoming_json(sample(), meta())

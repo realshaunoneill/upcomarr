@@ -84,7 +84,8 @@ def _badge(entry: Entry) -> tuple[str, str | None]:
         return "Expected on Plex", note
     if entry.badge == RELEASED:
         when = short_date(date.fromisoformat(entry.expected_date)) if entry.expected_date else None
-        return "On its way to Plex", (f"Released {when}" if when else None)
+        verb = "Aired" if entry.kind == "tv" else "Released"
+        return "On its way to Plex", (f"{verb} {when}" if when else None)
     if entry.badge == IN_CINEMAS:
         if entry.expected_date:
             note = f"On Plex from about {short_date(date.fromisoformat(entry.expected_date))}"
@@ -92,6 +93,12 @@ def _badge(entry: Entry) -> tuple[str, str | None]:
             note = "Plex date not announced yet"
         return "In cinemas", note
     return entry.badge, None
+
+
+def _downloading(entry: Entry) -> str | None:
+    if not entry.downloading:
+        return None
+    return "Downloading" if entry.downloading == entry.count else f"{entry.downloading} of {entry.count} downloading"
 
 
 HIGHLIGHT_TEXT = {
@@ -125,7 +132,8 @@ def _card(entry: Entry, compact: bool = False, details_label: str = "Details") -
     if compact:
         note = None
     parts = [
-        f'<li class="card" data-kind="{h(entry.kind)}" data-on-plex="{"true" if entry.on_plex else "false"}">',
+        f'<li class="card" data-kind="{h(entry.kind)}" data-on-plex="{"true" if entry.on_plex else "false"}"'
+        f"{' data-downloading' if entry.downloading else ''}>",
         f'<img class="poster" src="{h(poster)}" alt="" width="100" height="150" loading="lazy" decoding="async">',
         '<div class="card-body">',
         f'<h3 class="card-title">{h(entry.title)}</h3>',
@@ -133,7 +141,12 @@ def _card(entry: Entry, compact: bool = False, details_label: str = "Details") -
     ]
     if entry.episode_title:
         parts.append(f'<p class="card-episode">{h(entry.episode_title)}</p>')
-    badges = f'<span class="badge badge-{h(entry.badge)}">{h(badge)}</span>'
+    downloading = _downloading(entry)
+    badges = ""
+    if not (downloading and entry.badge == RELEASED):  # "Downloading" already says it is on its way
+        badges += f'<span class="badge badge-{h(entry.badge)}">{h(badge)}</span>'
+    if downloading:
+        badges += f'<span class="badge badge-downloading">{h(downloading)}</span>'
     if entry.highlight in HIGHLIGHT_TEXT:
         badges += f'<span class="badge badge-highlight">{h(HIGHLIGHT_TEXT[entry.highlight])}</span>'
     parts.append(f'<p class="badges">{badges}</p>')
@@ -150,7 +163,8 @@ def _card(entry: Entry, compact: bool = False, details_label: str = "Details") -
         # Same origin and through the same login as the page; opening it hands the event to the calendar app.
         actions.append(
             f'<a class="action action-calendar" href="{h(entry.calendar)}" '
-            f'aria-label="Add to calendar: {h(entry.title)}">Add to calendar</a>'
+            f'aria-label="Add to calendar: {h(entry.title)}">'
+            '<span class="wide-only">Add to calendar</span><span class="narrow-only">Calendar</span></a>'
         )
     if actions:
         parts.append(f'<p class="card-actions">{"".join(actions)}</p>')
@@ -201,15 +215,20 @@ def render_index(schedule: Schedule, meta: Meta) -> str:
         '<header class="site-header">',
         f"<h1>{h(meta.title)}</h1>",
         '<p class="tagline">What is on its way to Plex</p>',
-        '<nav class="filters" aria-label="Filter" hidden>',
-        '<div class="filter-group" role="group" aria-label="Show">',
-        '<button type="button" data-filter="all" aria-pressed="true">All</button>',
-        '<button type="button" data-filter="tv" aria-pressed="false">TV</button>',
-        '<button type="button" data-filter="movie" aria-pressed="false">Movies</button>',
-        "</div>",
-        '<label class="filter-toggle"><input type="checkbox" data-hide-on-plex> Hide what is already on Plex</label>',
-        "</nav>",
         "</header>",
+        # Outside the header so it can stay at the top of the screen while the whole page scrolls under it.
+        '<nav class="filters" aria-label="Filter" hidden><div class="filters-inner">',
+        '<div class="filter-group" role="group" aria-label="Show">',
+        *(
+            f'<button type="button" data-filter="{key}" aria-pressed="{"true" if key == "all" else "false"}">'
+            f'{label} <span class="count" data-count="{key}"></span></button>'
+            for key, label in (("all", "All"), ("tv", "TV"), ("movie", "Movies"))
+        ),
+        "</div>",
+        '<label class="filter-toggle"><input type="checkbox" data-hide-on-plex> '
+        '<span class="wide-only">Hide what is already on Plex</span><span class="narrow-only">Hide on Plex</span>'
+        "</label>",
+        "</div></nav>",
         "<main>",
         _banners(meta),
     ]
@@ -229,6 +248,7 @@ def render_index(schedule: Schedule, meta: Meta) -> str:
             )
             body.extend(_card(e, details_label=meta.details_label) for e in day.entries)
             body.append("</ul></section>")
+        body.append('<p class="empty" data-filtered-empty hidden>Nothing here with these filters.</p>')
     else:
         body.append('<p class="empty">Nothing is scheduled yet. Check back soon.</p>')
     body.append(

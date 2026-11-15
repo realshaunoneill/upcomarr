@@ -49,7 +49,8 @@ class SonarrTest(unittest.TestCase):
         with FakeArr(fixtures.sonarr_calendar()) as arr:
             client = Client(arr.url, fixtures.API_KEY, 5)
             episodes, sensitive = sonarr.fetch(client, date(2026, 10, 30), date(2027, 1, 3), False, ())
-            self.assertEqual(len(episodes), 11)
+            self.assertEqual(len(episodes), 13)
+            self.assertEqual(len({e.episode_id for e in episodes}), 13)
             self.assertIn(f"/data/tv/CANARY-series-path-{fixtures.SERIES_IDS[0]}", sensitive)
             query = arr.requests[0][0]
             self.assertIn("includeSeries=true", query)
@@ -92,6 +93,54 @@ class RadarrTest(unittest.TestCase):
 
     def test_unmonitored(self):
         self.assertIsNone(radarr.project(fixtures.movie(1, "Film", monitored=False), False, None))
+
+
+class QueueTest(unittest.TestCase):
+    def test_only_what_is_on_its_way(self):
+        _, market, moons, harbour = fixtures.shows()
+        with FakeArr(queue=fixtures.sonarr_queue()) as arr:
+            ids, sensitive = sonarr.fetch_queue(Client(arr.url, fixtures.API_KEY, 5))
+        # Downloading, queued and importing count; failed, paused and unmatched do not. The upgrade of
+        # Paper Moons is still in the set: schedule.py leaves out what is already on Plex.
+        want = {fixtures.episode_id(s, n) for s, n in ((harbour, 2), (market, 1), (market, 2), (moons, 3))}
+        self.assertEqual(ids, want)
+        self.assertIn(f"/data/usenet/CANARY-output-{fixtures.episode_id(harbour, 2)}", sensitive)
+
+    def test_radarr(self):
+        with FakeArr(queue=fixtures.radarr_queue(), key=fixtures.OTHER_KEY) as arr:
+            ids, _ = radarr.fetch_queue(Client(arr.url, fixtures.OTHER_KEY, 5))
+        self.assertEqual(ids, {fixtures.MOVIE_IDS[2], fixtures.MOVIE_IDS[3]})  # not the blocked import
+
+    def test_reads_every_page(self):
+        records = [fixtures.queue_record("episodeId", n, "downloading", "downloading") for n in range(1, 451)]
+        with FakeArr(queue=records) as arr:
+            ids, _ = sonarr.fetch_queue(Client(arr.url, fixtures.API_KEY, 5))
+            self.assertEqual(ids, frozenset(range(1, 451)))
+            self.assertEqual(len(arr.requests), 3)
+            self.assertIn("page=3&pageSize=200", arr.requests[-1][0])
+
+    def test_empty_queue_is_one_request(self):
+        with FakeArr() as arr:
+            ids, _ = sonarr.fetch_queue(Client(arr.url, fixtures.API_KEY, 5))
+            self.assertEqual((ids, len(arr.requests)), (frozenset(), 1))
+
+    def test_bad_shape(self):
+        with FakeArr() as arr:
+            arr.body_override = b"[]"
+            with self.assertRaises(FetchError) as ctx:
+                sonarr.fetch_queue(Client(arr.url, fixtures.API_KEY, 5))
+            self.assertEqual(ctx.exception.code, "bad_shape")
+
+    def test_wrong_types_are_skipped(self):
+        odd = [
+            fixtures.queue_record("episodeId", 5, "downloading", "downloading"),
+            {**fixtures.queue_record("episodeId", 6, "downloading", "downloading"), "episodeId": "6"},
+            {**fixtures.queue_record("episodeId", 7, "downloading", "downloading"), "episodeId": True},
+            "not a record",
+        ]
+        with FakeArr(queue=odd) as arr:
+            ids, _ = sonarr.fetch_queue(Client(arr.url, fixtures.API_KEY, 5))
+        self.assertEqual(ids, {5})
 
 
 class TagsTest(unittest.TestCase):

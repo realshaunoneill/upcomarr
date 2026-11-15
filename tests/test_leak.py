@@ -29,7 +29,7 @@ ALLOWED_KEYS = {
     # entries
     "kind", "episode_title", "count", "on_plex_count", "network", "overview", "time", "badge",
     "on_plex", "expected_date", "expected_via", "cinema_date", "poster", "highlight", "trailer", "link",
-    "starts_at", "runtime", "calendar",
+    "starts_at", "runtime", "calendar", "downloading",
 }  # fmt: skip
 
 
@@ -49,8 +49,12 @@ class LeakTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.out = Path(self.tmp.name)
-        self.sonarr = FakeArr(fixtures.sonarr_calendar(), key=fixtures.API_KEY).__enter__()
-        self.radarr = FakeArr(fixtures.radarr_calendar(), key=fixtures.OTHER_KEY, app="Radarr").__enter__()
+        self.sonarr = FakeArr(fixtures.sonarr_calendar(), key=fixtures.API_KEY, queue=fixtures.sonarr_queue())
+        self.radarr = FakeArr(
+            fixtures.radarr_calendar(), key=fixtures.OTHER_KEY, app="Radarr", queue=fixtures.radarr_queue()
+        )
+        self.sonarr.__enter__()
+        self.radarr.__enter__()
 
     def tearDown(self):
         self.sonarr.__exit__()
@@ -96,6 +100,7 @@ class LeakTest(unittest.TestCase):
             "MediaCover",
             "/data/",
             *(str(i) for i in fixtures.INTERNAL_IDS),
+            *(str(e["id"]) for e in fixtures.sonarr_calendar()),  # episode ids
         ]
         checked = 0
         for path in self.published():
@@ -115,10 +120,29 @@ class LeakTest(unittest.TestCase):
         titles = {e["title"] for d in data["days"] for e in d["entries"]}
         self.assertEqual(
             titles,
-            {"The Lighthouse Keepers", "Night Market", "Paper Moons", "The Last Ferry", "Signal Fires", "Orchard"},
+            {
+                "The Lighthouse Keepers",
+                "Night Market",
+                "Paper Moons",
+                "Harbour Lights",
+                "The Last Ferry",
+                "Signal Fires",
+                "Orchard",
+            },
         )
         self.assertEqual({e["title"] for e in data["recent"]}, {"Paper Moons", "Small Hours"})
         entries = {e["title"]: e for d in data["days"] for e in d["entries"]}
+        # The queues: only what is not on Plex yet and on its way. Harbour Lights' S03E02 aired yesterday and is
+        # downloading, so it is on today; its S03E01 aired the day before and its download is paused, so it is not.
+        self.assertEqual(
+            {t: e["downloading"] for t, e in entries.items() if e["downloading"]},
+            {"Harbour Lights": 1, "Night Market": 2, "Orchard": 1},
+        )
+        self.assertEqual(
+            (entries["Harbour Lights"]["label"], entries["Harbour Lights"]["date"], entries["Harbour Lights"]["badge"]),
+            ("S03E02", "2026-11-03", "released"),
+        )
+        self.assertTrue(all(e["downloading"] == 0 for e in data["recent"]))  # the two upgrades
         # Valid ids become links; the canary trailer ids and finale types were rejected, not passed on.
         self.assertEqual(entries["The Last Ferry"]["trailer"], "https://www.youtube.com/watch?v=aBcDeFgHiJk")
         self.assertIsNone(entries["Signal Fires"]["trailer"])
@@ -161,6 +185,32 @@ class LeakTest(unittest.TestCase):
         self.assertNotIn("upcomarr_last_publish_timestamp_seconds", metrics)
         status = json.loads((self.out / "status.json").read_text())
         self.assertEqual((status["ok"], status["error"]), (False, "leak"))
+
+    def test_a_queue_that_cannot_be_read_costs_only_the_badges(self):
+        self.radarr.queue_fail_status = 500
+        registry = Registry()
+        ok = run_once(self.config(), Layout(self.out), registry, now=fixtures.NOW)
+        self.assertTrue(ok)
+        metrics = registry.render()
+        self.assertIn('upcomarr_queue_up{source="radarr"} 0', metrics)
+        self.assertIn('upcomarr_queue_up{source="sonarr"} 1', metrics)
+        self.assertIn("upcomarr_downloading_entries 2", metrics)  # Harbour Lights and Night Market
+        data = json.loads((self.out / "current" / "upcoming.json").read_text())
+        movies = [e for d in data["days"] for e in d["entries"] if e["kind"] == "movie"]
+        self.assertTrue(movies and all(e["downloading"] == 0 for e in movies))
+
+    def test_an_arr_that_is_down_is_not_asked_for_its_queue(self):
+        run_once(self.config(), Layout(self.out), Registry(), now=fixtures.NOW)
+        self.sonarr.fail_status = 503
+        self.sonarr.requests.clear()
+        registry = Registry()
+        run_once(self.config(), Layout(self.out), registry, now=fixtures.NOW)
+        self.assertFalse(any(path.startswith("/api/v3/queue") for path, _ in self.sonarr.requests))
+        self.assertIn('upcomarr_queue_up{source="sonarr"} 0', registry.render())
+        # The saved calendar is shown, but with no badges: a download seen before may have finished since.
+        data = json.loads((self.out / "current" / "upcoming.json").read_text())
+        tv = [e for d in data["days"] for e in d["entries"] if e["kind"] == "tv"]
+        self.assertTrue(tv and all(e["downloading"] == 0 for e in tv))
 
     def test_one_arr_down_keeps_its_last_data(self):
         run_once(self.config(), Layout(self.out), Registry(), now=fixtures.NOW)

@@ -172,7 +172,7 @@ def load(env: Mapping[str, str]) -> Config:
     return Config(
         sources=tuple(sources),
         days_behind=_int(env, "DAYS_BEHIND", 3, 0, 30),
-        interval_seconds=_int(env, "INTERVAL_SECONDS", 1800, 60, 86400),
+        interval_seconds=_int(env, "INTERVAL_SECONDS", 300, 60, 86400),
         tz_name=tz_name,
         tz=tz,
         site_title=title[:80],

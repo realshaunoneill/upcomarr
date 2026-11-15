@@ -48,6 +48,7 @@ def main(base: str, site: str) -> int:
     expect(status == 200, "/ is 200")
     page = body.decode()
     expect("Night Market" in page and "The Last Ferry" in page, "/ lists the fixture items")
+    expect("badge-downloading" in page and "Harbour Lights" in page, "/ shows what the queues are downloading")
     for name, value in HEADERS.items():
         expect(headers.get(name) == value, f"/ sends {name}")
     expect(headers.get("cache-control") == "no-cache", "/ is no-cache")

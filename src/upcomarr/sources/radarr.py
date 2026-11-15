@@ -1,4 +1,4 @@
-"""Upcoming movies from Radarr's calendar (v3 API).
+"""Upcoming movies from Radarr's calendar, and what its queue is downloading (v3 API).
 
 Radarr returns a movie when any of its cinema, digital or physical dates falls in the
 window, so the list includes movies that are already in the library. Placing them is
@@ -23,11 +23,17 @@ from . import (
     as_youtube,
     collect_sensitive,
     matches_tags,
+    queue_ids,
 )
 from . import poster_ref as _poster_ref
 
 API = "v3"
 NAME = "radarr"
+
+
+def fetch_queue(client: Client) -> tuple[frozenset[int], set[str]]:
+    """Movie ids downloading now."""
+    return queue_ids(client, "movieId")
 
 
 def fetch(

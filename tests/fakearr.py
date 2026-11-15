@@ -21,8 +21,11 @@ class FakeArr:
         app: str = "Sonarr",
         host: str = "127.0.0.1",
         port: int = 0,
+        queue: list[dict[str, Any]] | None = None,
     ):
         self.calendar = calendar if calendar is not None else []
+        self.queue = queue if queue is not None else []
+        self.queue_fail_status: int | None = None  # answer only the queue with this status
         self.tags = fixtures.tags()
         self.key = key
         self.app = app
@@ -89,6 +92,22 @@ class FakeArr:
                     if query.get("unmonitored") == ["false"]:
                         data = [i for i in data if i.get("monitored")]
                     self._send(200, json.dumps(data).encode(), "application/json")
+                elif parts.path == "/api/v3/queue":
+                    if fake.queue_fail_status:
+                        self._send(fake.queue_fail_status, b"{}", "application/json")
+                        return
+                    query = parse_qs(parts.query)
+                    page = int(query.get("page", ["1"])[0])
+                    size = int(query.get("pageSize", ["10"])[0])
+                    body = {
+                        "page": page,
+                        "pageSize": size,
+                        "sortKey": "timeleft",
+                        "sortDirection": "ascending",
+                        "totalRecords": len(fake.queue),
+                        "records": fake.queue[(page - 1) * size : page * size],
+                    }
+                    self._send(200, json.dumps(body).encode(), "application/json")
                 elif parts.path == "/api/v3/tag":
                     self._send(200, json.dumps(fake.tags).encode(), "application/json")
                 elif parts.path == "/api/v3/system/status":
